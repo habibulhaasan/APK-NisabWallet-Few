@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -205,6 +207,7 @@ fun MonthlyGroceryScreen(
 
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
 
+        // Floating action row
         if (state.activeTab == "planner") {
             val recordable = state.rows.count { it.curBought && !it.curRecorded && !it.archived }
             if (recordable > 0) {
@@ -787,7 +790,7 @@ private fun GroceryRowItem(
     }
 }
 
-// Compact text field optimized for tables
+// Custom perfectly centered text field with explicit borders
 @Composable
 private fun DenseTextField(
     value: String,
@@ -797,28 +800,53 @@ private fun DenseTextField(
     numeric: Boolean = false,
     alignEnd: Boolean = false,
     enabled: Boolean = true,
-    containerColor: Color = Color.Transparent,
+    containerColor: Color = Color.White,
     focusColor: Color = Emerald600,
 ) {
-    OutlinedTextField(
+    var isFocused by remember { mutableStateOf(false) }
+
+    BasicTextField(
         value = value,
         onValueChange = onValueChange,
         enabled = enabled,
-        modifier = modifier.height(42.dp),
-        placeholder = { Text(placeholder, fontSize = 12.sp, color = Gray300) },
-        textStyle = TextStyle(fontSize = 12.sp, textAlign = if (alignEnd) TextAlign.End else TextAlign.Start, fontWeight = if (numeric) FontWeight.Medium else FontWeight.Normal),
+        modifier = modifier
+            .height(38.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        textStyle = TextStyle(
+            fontSize = 13.sp,
+            color = if (enabled) Gray900 else Gray500,
+            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+            fontWeight = if (numeric) FontWeight.SemiBold else FontWeight.Normal
+        ),
         singleLine = true,
         keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = Color.Transparent,
-            focusedBorderColor = focusColor,
-            unfocusedContainerColor = containerColor,
-            focusedContainerColor = Color.White,
-            disabledBorderColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent,
-            disabledTextColor = Gray500,
-        ),
-        shape = RoundedCornerShape(6.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (enabled) containerColor else Color.Transparent, RoundedCornerShape(6.dp))
+                    .border(
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) focusColor else if (enabled) Gray300 else Color.Transparent,
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart) {
+                    if (value.isEmpty() && enabled) {
+                        Text(
+                            text = placeholder,
+                            color = Gray400,
+                            fontSize = 13.sp,
+                            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
     )
 }
 
@@ -1068,21 +1096,29 @@ private fun BulkItemForm(
 private fun UnitDropdown(unit: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        OutlinedTextField(
-            value = unit,
-            onValueChange = {},
-            readOnly = true,
-            label = if (!compact) { { Text("Unit") } } else null,
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp),
-            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
-            shape = RoundedCornerShape(if (compact) 8.dp else 10.dp),
-        )
-        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (compact) 42.dp else 48.dp)
+                .background(Color.White, RoundedCornerShape(if (compact) 8.dp else 10.dp))
+                .border(1.dp, Gray300, RoundedCornerShape(if (compact) 8.dp else 10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = unit.ifBlank { "Unit" },
+                fontSize = if (compact) 13.sp else 14.sp,
+                color = if (unit.isBlank()) Gray400 else Gray900,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray500, modifier = Modifier.size(18.dp))
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             VALID_UNITS.forEach { u ->
-                DropdownMenuItem(text = { Text(u) }, onClick = { onSelect(u); expanded = false })
+                DropdownMenuItem(text = { Text(u, fontSize = 13.sp) }, onClick = { onSelect(u); expanded = false })
             }
         }
     }
@@ -1096,23 +1132,32 @@ private fun CategoryDropdown(
     compact: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val catName = if (selectedId.isBlank()) "No category" else categoryLabel(selectedId, categories)
     Box {
-        OutlinedTextField(
-            value = if (selectedId.isBlank()) "No category" else categoryLabel(selectedId, categories),
-            onValueChange = {},
-            readOnly = true,
-            label = if (!compact) { { Text("Category") } } else null,
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp),
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(if (compact) 8.dp else 10.dp),
-        )
-        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (compact) 42.dp else 48.dp)
+                .background(Color.White, RoundedCornerShape(if (compact) 8.dp else 10.dp))
+                .border(1.dp, Gray300, RoundedCornerShape(if (compact) 8.dp else 10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = catName,
+                fontSize = if (compact) 13.sp else 14.sp,
+                color = if (selectedId.isBlank()) Gray400 else Gray900,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray500, modifier = Modifier.size(18.dp))
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(text = { Text("No category") }, onClick = { onSelect(""); expanded = false })
+            DropdownMenuItem(text = { Text("No category", fontSize = 13.sp) }, onClick = { onSelect(""); expanded = false })
             categories.forEach { c ->
-                DropdownMenuItem(text = { Text(c.name) }, onClick = { onSelect(c.id); expanded = false })
+                DropdownMenuItem(text = { Text(c.name, fontSize = 13.sp) }, onClick = { onSelect(c.id); expanded = false })
             }
         }
     }
@@ -1183,23 +1228,32 @@ private fun ConfirmRecordDialog(state: GroceryUiState, viewModel: MonthlyGrocery
 @Composable
 private fun AccountDropdown(accounts: List<GroceryAccount>, selectedId: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedName = accounts.find { it.id == selectedId }?.name ?: "Select account"
+    val selected = accounts.find { it.id == selectedId }
     Box {
-        OutlinedTextField(
-            value = selectedName,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Account") },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-        )
-        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(42.dp)
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .border(1.dp, Gray200, RoundedCornerShape(10.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = selected?.let { "${it.name} — ${fmt(it.balance)}" } ?: "Select account…",
+                fontSize = 14.sp,
+                color = if (selected != null) Gray800 else Gray400,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray500, modifier = Modifier.size(18.dp))
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             accounts.forEach { a ->
                 DropdownMenuItem(
-                    text = { Text("${a.name} · ${fmt(a.balance)}") },
+                    text = { Text("${a.name} · ${fmt(a.balance)}", fontSize = 14.sp) },
                     onClick = { onSelect(a.id); expanded = false },
                 )
             }
@@ -1256,14 +1310,14 @@ private fun GroupPriceSheet(state: GroceryUiState, viewModel: MonthlyGroceryView
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(row.name, fontSize = 12.sp, color = Gray800, modifier = Modifier.weight(1f))
-                        OutlinedTextField(
+                        DenseTextField(
                             value = modal.perItemPrices[row.itemId] ?: "",
                             onValueChange = { viewModel.setPerItemPrice(row.itemId, it) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            textStyle = TextStyle(fontSize = 12.sp, textAlign = TextAlign.End),
-                            modifier = Modifier.width(90.dp).height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
+                            placeholder = "ref price",
+                            numeric = true,
+                            alignEnd = true,
+                            focusColor = Violet400,
+                            modifier = Modifier.width(90.dp)
                         )
                     }
                 }

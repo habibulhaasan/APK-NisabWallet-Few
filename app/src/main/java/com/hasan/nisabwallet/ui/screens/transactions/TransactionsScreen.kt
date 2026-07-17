@@ -1,9 +1,5 @@
 package com.hasan.nisabwallet.ui.screens.transactions
 
-// Converted from: src/app/dashboard/transactions/page.js (68 KB)
-// Mirrors every UI section — filter bar, summary cards, transaction list,
-// TransactionDetailPopup (bottom sheet), AddEditTransactionSheet, DeleteConfirmDialog
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -11,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
@@ -28,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,15 +37,14 @@ import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ─── Screen Entry Point ───────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun TransactionsScreen(
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val fmt   = { n: Double -> CurrencyFormatter.formatBDT(n) }
+    // Remember the formatter to avoid recreating it on every recomposition
+    val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = state.isLoading,
@@ -57,10 +54,10 @@ fun TransactionsScreen(
     Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
         Column(Modifier.fillMaxSize()) {
 
-            // ── Top action bar ────────────────────────────────────────────
             TopActionBar(
                 onAddIncome  = { viewModel.showAddSheet("Income") },
                 onAddExpense = { viewModel.showAddSheet("Expense") },
+                onAddTransfer= { viewModel.showAddSheet("Transfer") },
                 onFilter     = { viewModel.showFilterSheet() },
                 hasActiveFilter = state.filterType != "All"
                         || state.filterAccountId != "all"
@@ -68,26 +65,22 @@ fun TransactionsScreen(
                         || state.filterStartDate.isNotBlank(),
             )
 
-            // ── Search bar ────────────────────────────────────────────────
             SearchBar(
                 query    = state.searchQuery,
                 onChange = { viewModel.setSearchQuery(it) },
             )
 
-            // ── Month summary row ─────────────────────────────────────────
             MonthlySummaryRow(
                 income  = state.thisMonthIncome,
                 expense = state.thisMonthExpense,
                 fmt     = fmt,
             )
 
-            // ── Transaction type quick-filter tabs ────────────────────────
             TypeFilterTabs(
                 selected = state.filterType,
                 onSelect = { viewModel.setFilterType(it) },
             )
 
-            // ── Transaction list ──────────────────────────────────────────
             if (state.isLoading) {
                 LoadingShimmerList()
             } else if (state.filteredTransactions.isEmpty()) {
@@ -116,9 +109,6 @@ fun TransactionsScreen(
         )
     }
 
-    // ── Sheets & Dialogs (rendered as overlays) ───────────────────────────
-
-    // Transaction detail popup — mirrors TransactionDetailPopup in page.js
     if (state.showDetailPopup && state.detailTransaction != null) {
         TransactionDetailSheet(
             transaction     = state.detailTransaction!!,
@@ -131,7 +121,6 @@ fun TransactionsScreen(
         )
     }
 
-    // Add / Edit sheet — mirrors the modal form in page.js
     if (state.showAddEditSheet) {
         AddEditTransactionSheet(
             editing    = state.editingTransaction,
@@ -151,7 +140,6 @@ fun TransactionsScreen(
         )
     }
 
-    // Filter sheet
     if (state.showFilterSheet) {
         FilterSheet(
             state    = state,
@@ -164,13 +152,12 @@ fun TransactionsScreen(
         )
     }
 
-    // Delete confirm dialog — mirrors ConfirmDialog used in page.js
     if (state.showDeleteConfirm && state.deletingTransaction != null) {
         AlertDialog(
             onDismissRequest = { viewModel.hideDeleteConfirm() },
             icon             = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title            = { Text("Delete Transaction") },
-            text             = { Text("Are you sure you want to delete this transaction? This will reverse the effect on your account balance.") },
+            title            = { Text("Delete Record") },
+            text             = { Text("Are you sure you want to delete this record? This will reverse the effect on your account balance(s).") },
             confirmButton    = {
                 Button(
                     onClick = { viewModel.deleteTransaction() },
@@ -185,13 +172,13 @@ fun TransactionsScreen(
 }
 
 // ─── Top Action Bar ───────────────────────────────────────────────────────────
-// Mirrors: [+ Income] [+ Expense] [Filter] action row in page.js
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopActionBar(
     onAddIncome: () -> Unit,
     onAddExpense: () -> Unit,
+    onAddTransfer: () -> Unit,
     onFilter: () -> Unit,
     hasActiveFilter: Boolean,
 ) {
@@ -207,6 +194,7 @@ private fun TopActionBar(
             color      = MaterialTheme.colorScheme.onBackground,
             modifier   = Modifier.weight(1f),
         )
+
         // + Income
         FilledTonalButton(
             onClick = onAddIncome,
@@ -214,12 +202,11 @@ private fun TopActionBar(
                 containerColor = Color(0xFFF0FDF4),
                 contentColor   = Color(0xFF16A34A),
             ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
         ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Income", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
+
         // + Expense
         FilledTonalButton(
             onClick = onAddExpense,
@@ -227,12 +214,23 @@ private fun TopActionBar(
                 containerColor = Color(0xFFFFF1F2),
                 contentColor   = Color(0xFFDC2626),
             ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Expense", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
         }
+
+        // + Transfer
+        FilledTonalButton(
+            onClick = onAddTransfer,
+            colors  = ButtonDefaults.filledTonalButtonColors(
+                containerColor = Color(0xFFEFF6FF),
+                contentColor   = Color(0xFF2563EB),
+            ),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+        ) {
+            Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+
         // Filter
         BadgedBox(
             badge = {
@@ -267,7 +265,6 @@ private fun SearchBar(query: String, onChange: (String) -> Unit) {
 }
 
 // ─── Monthly Summary Row ──────────────────────────────────────────────────────
-// Mirrors: thisMonthIncome / thisMonthExpense summary cards in page.js
 
 @Composable
 private fun MonthlySummaryRow(income: Double, expense: Double, fmt: (Double) -> String) {
@@ -326,7 +323,6 @@ private fun SummaryMiniCard(
 }
 
 // ─── Type Filter Tabs ─────────────────────────────────────────────────────────
-// Mirrors: All / Income / Expense filter toggle in page.js
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -371,10 +367,17 @@ private fun TransactionList(
     onTap: (Transaction) -> Unit,
     fmt: (Double) -> String,
 ) {
-    // Group by date — mirrors the date-grouped rendering in page.js
-    val grouped = transactions.groupBy { it.date }.entries.sortedByDescending { it.key }
-    val sdf     = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val display = SimpleDateFormat("dd MMM yyyy", Locale.US)
+    val grouped = remember(transactions) {
+        transactions.groupBy { it.date }.entries.sortedByDescending { it.key }
+    }
+
+    val displayDates = remember(grouped) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val display = SimpleDateFormat("dd MMM yyyy", Locale.US)
+        grouped.associate {
+            it.key to runCatching { display.format(sdf.parse(it.key)!!) }.getOrDefault(it.key)
+        }
+    }
 
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
@@ -382,11 +385,9 @@ private fun TransactionList(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         grouped.forEach { (date, txs) ->
-            // Date header
             item(key = "header-$date") {
-                val dateLabel = runCatching { display.format(sdf.parse(date)!!) }.getOrDefault(date)
                 Text(
-                    text     = dateLabel,
+                    text     = displayDates[date] ?: date,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color    = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -407,9 +408,6 @@ private fun TransactionList(
     }
 }
 
-// ── Single list item ──────────────────────────────────────────────────────────
-// Mirrors the transaction row in page.js — icon, category color, note, account, amount
-
 @Composable
 private fun TransactionListItem(
     tx: Transaction,
@@ -419,15 +417,28 @@ private fun TransactionListItem(
     onTap: () -> Unit,
     fmt: (Double) -> String,
 ) {
-    val catColor = runCatching {
-        val hex = getCategoryColor(tx.categoryId).trimStart('#')
-        Color("#$hex".toColorInt())
-    }.getOrDefault(Color.Gray)
+    val colorHex = getCategoryColor(tx.categoryId)
+    val catColor = remember(tx.isTransfer, colorHex) {
+        if (tx.isTransfer) Color(0xFF3B82F6) else runCatching {
+            Color("#${colorHex.trimStart('#')}".toColorInt())
+        }.getOrDefault(Color.Gray)
+    }
 
-    val amountColor = if (tx.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
-    val sign        = if (tx.type == "Income") "+" else "−"
-    val catName     = getCategoryName(tx.categoryId).ifBlank { tx.type }
+    val amountColor = if (tx.isTransfer) Color(0xFF3B82F6) else if (tx.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
+    val sign        = if (tx.isTransfer) "" else if (tx.type == "Income") "+" else "−"
     val accName     = getAccountName(tx.accountId)
+
+    val displayTitle = if (tx.isTransfer) {
+        if (tx.type == "Income") "From ${tx.relatedAccountName}" else "To ${tx.relatedAccountName}"
+    } else {
+        tx.description.ifBlank { getCategoryName(tx.categoryId).ifBlank { tx.type } }
+    }
+
+    val displaySubtitle = if (tx.isTransfer) {
+        accName
+    } else {
+        "${getCategoryName(tx.categoryId)} · $accName"
+    }
 
     Card(
         modifier  = Modifier.fillMaxWidth().clickable { onTap() },
@@ -440,17 +451,20 @@ private fun TransactionListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // Category color dot
             Box(
                 modifier         = Modifier.size(36.dp).background(catColor.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(modifier = Modifier.size(10.dp).background(catColor, CircleShape))
+                if (tx.isTransfer) {
+                    Icon(Icons.Default.SyncAlt, contentDescription = null, tint = catColor, modifier = Modifier.size(16.dp))
+                } else {
+                    Box(modifier = Modifier.size(10.dp).background(catColor, CircleShape))
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text       = tx.description.ifBlank { catName },
+                    text       = displayTitle,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color      = MaterialTheme.colorScheme.onSurface,
@@ -458,11 +472,7 @@ private fun TransactionListItem(
                     overflow   = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(catName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("·", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(accName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                Text(displaySubtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Column(horizontalAlignment = Alignment.End) {
@@ -486,7 +496,6 @@ private fun TransactionListItem(
 }
 
 // ─── Transaction Detail Sheet ─────────────────────────────────────────────────
-// Mirrors: TransactionDetailPopup component in page.js — slides up from bottom
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -499,11 +508,14 @@ private fun TransactionDetailSheet(
     onDelete: (Transaction) -> Unit,
     fmt: (Double) -> String,
 ) {
-    val accentColor = if (transaction.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
-    val sign        = if (transaction.type == "Income") "+" else "−"
-    val sdf         = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val display     = SimpleDateFormat("d MMMM yyyy", Locale.US)
-    val dateLabel   = runCatching { display.format(sdf.parse(transaction.date)!!) }.getOrDefault(transaction.date)
+    val accentColor = if (transaction.isTransfer) Color(0xFF2563EB) else if (transaction.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
+    val sign        = if (transaction.isTransfer) "" else if (transaction.type == "Income") "+" else "−"
+
+    val dateLabel = remember(transaction.date) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val display = SimpleDateFormat("d MMMM yyyy", Locale.US)
+        runCatching { display.format(sdf.parse(transaction.date)!!) }.getOrDefault(transaction.date)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -511,7 +523,6 @@ private fun TransactionDetailSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
 
-            // ── Colored header with amount — mirrors gradient header in TransactionDetailPopup ──
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .background(accentColor)
@@ -527,7 +538,7 @@ private fun TransactionDetailSheet(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text     = transaction.description.ifBlank { getCategoryName(transaction.categoryId) },
+                        text     = if (transaction.isTransfer) "Account Transfer" else transaction.description.ifBlank { getCategoryName(transaction.categoryId) },
                         fontSize = 15.sp,
                         color    = Color.White.copy(alpha = 0.85f),
                     )
@@ -536,11 +547,25 @@ private fun TransactionDetailSheet(
 
             Spacer(Modifier.height(4.dp))
 
-            // ── Detail rows — mirrors DetailRow component in page.js ──
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                DetailRow("Type",     transaction.type)
-                DetailRow("Category", getCategoryName(transaction.categoryId))
-                DetailRow("Account",  getAccountName(transaction.accountId))
+                DetailRow("Type",     if (transaction.isTransfer) "Transfer" else transaction.type)
+
+                if (transaction.isTransfer) {
+                    if (transaction.type == "Income") {
+                        DetailRow("To Account", getAccountName(transaction.accountId))
+                        DetailRow("From Account", transaction.relatedAccountName ?: "")
+                    } else {
+                        DetailRow("From Account", getAccountName(transaction.accountId))
+                        DetailRow("To Account", transaction.relatedAccountName ?: "")
+                    }
+                    if (!transaction.originalDescription.isNullOrBlank()) {
+                        DetailRow("Note", transaction.originalDescription)
+                    }
+                } else {
+                    DetailRow("Category", getCategoryName(transaction.categoryId))
+                    DetailRow("Account",  getAccountName(transaction.accountId))
+                }
+
                 DetailRow("Date",     dateLabel)
                 if (transaction.chargeAmount > 0) DetailRow("Charges", "${fmt(transaction.chargeAmount)}${if (transaction.chargeNote.isNotBlank()) " (${transaction.chargeNote})" else ""}", Color(0xFFF97316))
                 if (transaction.isRiba)     DetailRow("⚠ Riba Flag", "This is interest income", Color(0xFFD97706))
@@ -548,7 +573,6 @@ private fun TransactionDetailSheet(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
 
-            // ── Action buttons ──────────────────────────────────────────
             Row(
                 modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -567,6 +591,7 @@ private fun TransactionDetailSheet(
                     onClick  = { onEdit(transaction) },
                     modifier = Modifier.weight(1f),
                     shape    = RoundedCornerShape(10.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = accentColor)
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
@@ -593,8 +618,6 @@ private fun DetailRow(label: String, value: String, valueColor: Color = Color.Un
 }
 
 // ─── Add / Edit Transaction Sheet ─────────────────────────────────────────────
-// Mirrors: the full transaction form modal in page.js
-// Includes: type toggle, amount, account, category (with inline add), description, date, charges field
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -609,28 +632,43 @@ private fun AddEditTransactionSheet(
 ) {
     var form by remember(editing) {
         mutableStateOf(
-            if (editing != null) TransactionForm(
-                type        = editing.type,
-                amount      = editing.amount.toString(),
-                accountId   = editing.accountId,
-                categoryId  = editing.categoryId,
-                description = editing.description,
-                date        = editing.date,
-                chargeAmount = if (editing.chargeAmount > 0) editing.chargeAmount.toString() else "",
-                chargeNote  = editing.chargeNote,
-            ) else TransactionForm()
+            if (editing != null) {
+                if (editing.isTransfer) {
+                    val isFrom = editing.transferDirection == "from"
+                    TransactionForm(
+                        type = "Transfer",
+                        amount = editing.amount.toString(),
+                        accountId = if (isFrom) editing.accountId else editing.relatedAccountId ?: "",
+                        toAccountId = if (isFrom) editing.relatedAccountId ?: "" else editing.accountId,
+                        description = editing.originalDescription ?: "",
+                        date = editing.date,
+                        chargeAmount = "",
+                        chargeNote = "",
+                    )
+                } else {
+                    TransactionForm(
+                        type        = editing.type,
+                        amount      = editing.amount.toString(),
+                        accountId   = editing.accountId,
+                        categoryId  = editing.categoryId,
+                        description = editing.description,
+                        date        = editing.date,
+                        chargeAmount = if (editing.chargeAmount > 0) editing.chargeAmount.toString() else "",
+                        chargeNote  = editing.chargeNote,
+                    )
+                }
+            } else TransactionForm()
         )
     }
 
     val isIncome    = form.type == "Income"
-    val accentColor = if (isIncome) Color(0xFF16A34A) else Color(0xFFDC2626)
+    val isTransfer  = form.type == "Transfer"
+    val accentColor = if (isTransfer) Color(0xFF2563EB) else if (isIncome) Color(0xFF16A34A) else Color(0xFFDC2626)
     val filteredCats = categories.filter { it.type == form.type }
 
-    // Inline category form state — mirrors InlineCategoryForm in page.js
     var showInlineCatForm by remember { mutableStateOf(false) }
     var inlineCatName     by remember { mutableStateOf("") }
     var inlineCatColor    by remember { mutableStateOf(if (isIncome) "#10B981" else "#EF4444") }
-
     val colorOptions = listOf("#EF4444","#F59E0B","#10B981","#3B82F6","#6366F1","#8B5CF6","#EC4899","#06B6D4","#84CC16","#F97316")
 
     ModalBottomSheet(
@@ -645,32 +683,39 @@ private fun AddEditTransactionSheet(
                 .padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // ── Sheet title ────────────────────────────────────────────
             Text(
-                text       = if (editing != null) "Edit Transaction" else "Add Transaction",
+                text       = if (editing != null) "Edit Record" else "Add Record",
                 fontSize   = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 color      = MaterialTheme.colorScheme.onSurface,
             )
 
-            // ── Type toggle — mirrors Income/Expense tab in page.js ───
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                listOf("Income", "Expense").forEach { type ->
-                    val sel = form.type == type
-                    val bg  = when { sel && type == "Income" -> Color(0xFF16A34A); sel -> Color(0xFFDC2626); else -> Color.Transparent }
-                    Box(
-                        modifier          = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable { form = form.copy(type = type, categoryId = "") }.padding(vertical = 12.dp),
-                        contentAlignment  = Alignment.Center,
-                    ) {
-                        Text(type, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+            // Tabs
+            if (editing == null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    listOf("Income", "Expense", "Transfer").forEach { type ->
+                        val sel = form.type == type
+                        val bg  = when {
+                            sel && type == "Income" -> Color(0xFF16A34A)
+                            sel && type == "Transfer" -> Color(0xFF2563EB)
+                            sel -> Color(0xFFDC2626)
+                            else -> Color.Transparent
+                        }
+                        Box(
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable {
+                                form = form.copy(type = type, categoryId = "")
+                            }.padding(vertical = 12.dp),
+                            contentAlignment  = Alignment.Center,
+                        ) {
+                            Text(type, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
 
-            // ── Amount field ───────────────────────────────────────────
             OutlinedTextField(
                 value         = form.amount,
                 onValueChange = { form = form.copy(amount = it) },
@@ -678,105 +723,112 @@ private fun AddEditTransactionSheet(
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(10.dp),
                 singleLine    = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
-            // ── Account dropdown ───────────────────────────────────────
-            LabeledDropdown(
-                label   = "Account",
-                value   = accounts.find { it.id == form.accountId }?.let { "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" } ?: "Select Account",
-                options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
-                onSelect= { form = form.copy(accountId = it) },
-            )
-
-            // ── Category dropdown with inline add ─────────────────────
-            Column {
+            if (isTransfer) {
                 LabeledDropdown(
-                    label    = "Category",
-                    value    = filteredCats.find { it.id == form.categoryId }?.name ?: "Select Category",
-                    options  = filteredCats.map { it.id to "${it.name}${if (it.isRiba) " ⚠" else ""}" } + listOf("__add_new__" to "➕ Add new category…"),
-                    onSelect = {
-                        if (it == "__add_new__") {
-                            inlineCatName = "" // Cleared on open instead of close to fix IDE warning
-                            showInlineCatForm = true
-                        } else {
-                            form = form.copy(categoryId = it)
-                            showInlineCatForm = false
-                        }
-                    },
+                    label   = "From Account",
+                    value   = accounts.find { it.id == form.accountId }?.let { "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" } ?: "Select Source Account",
+                    options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
+                    onSelect= { form = form.copy(accountId = it) },
                 )
 
-                // Inline category form — mirrors InlineCategoryForm component in page.js
-                AnimatedVisibility(visible = showInlineCatForm) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                        shape    = RoundedCornerShape(10.dp),
-                        colors   = CardDefaults.cardColors(containerColor = if (isIncome) Color(0xFFF0FDF4) else Color(0xFFFFF1F2)),
-                        border   = BorderStroke(1.dp, if (isIncome) Color(0xFF86EFAC) else Color(0xFFFCA5A5)),
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("New ${form.type} Category", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
-                            OutlinedTextField(
-                                value         = inlineCatName,
-                                onValueChange = { inlineCatName = it },
-                                placeholder   = { Text("Category name…", fontSize = 13.sp) },
-                                singleLine    = true,
-                                modifier      = Modifier.fillMaxWidth(),
-                                shape         = RoundedCornerShape(8.dp),
-                            )
-                            // Color picker row
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                colorOptions.forEach { hex ->
-                                    val c = runCatching { Color(hex.toColorInt()) }.getOrDefault(Color.Gray)
-                                    Box(
-                                        modifier = Modifier.size(24.dp)
-                                            .background(c, CircleShape)
-                                            .then(if (inlineCatColor == hex) Modifier.border(2.dp, Color.Black, CircleShape) else Modifier)
-                                            .clickable { inlineCatColor = hex }
-                                    )
-                                }
+                LabeledDropdown(
+                    label   = "To Account",
+                    value   = accounts.find { it.id == form.toAccountId }?.name ?: "Select Destination Account",
+                    options = accounts.filter { it.id != form.accountId }.map { it.id to it.name },
+                    onSelect= { form = form.copy(toAccountId = it) },
+                )
+            } else {
+                LabeledDropdown(
+                    label   = "Account",
+                    value   = accounts.find { it.id == form.accountId }?.let { "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" } ?: "Select Account",
+                    options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
+                    onSelect= { form = form.copy(accountId = it) },
+                )
+
+                Column {
+                    LabeledDropdown(
+                        label    = "Category",
+                        value    = filteredCats.find { it.id == form.categoryId }?.name ?: "Select Category",
+                        options  = filteredCats.map { it.id to "${it.name}${if (it.isRiba) " ⚠" else ""}" } + listOf("__add_new__" to "➕ Add new category…"),
+                        onSelect = {
+                            if (it == "__add_new__") {
+                                inlineCatName = ""
+                                showInlineCatForm = true
+                            } else {
+                                form = form.copy(categoryId = it)
+                                showInlineCatForm = false
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(modifier = Modifier.weight(1f), onClick = { showInlineCatForm = false }) { Text("Cancel", fontSize = 13.sp) }
-                                Button(
-                                    modifier = Modifier.weight(1f),
-                                    onClick  = {
-                                        if (inlineCatName.isNotBlank()) {
-                                            onAddCategory(inlineCatName, form.type, inlineCatColor) { newCat ->
-                                                form = form.copy(categoryId = newCat.id)
-                                                showInlineCatForm = false
+                        },
+                    )
+
+                    AnimatedVisibility(visible = showInlineCatForm) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            shape    = RoundedCornerShape(10.dp),
+                            colors   = CardDefaults.cardColors(containerColor = if (isIncome) Color(0xFFF0FDF4) else Color(0xFFFFF1F2)),
+                            border   = BorderStroke(1.dp, if (isIncome) Color(0xFF86EFAC) else Color(0xFFFCA5A5)),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("New ${form.type} Category", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
+                                OutlinedTextField(
+                                    value         = inlineCatName,
+                                    onValueChange = { inlineCatName = it },
+                                    placeholder   = { Text("Category name…", fontSize = 13.sp) },
+                                    singleLine    = true,
+                                    modifier      = Modifier.fillMaxWidth(),
+                                    shape         = RoundedCornerShape(8.dp),
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    colorOptions.forEach { hex ->
+                                        val c = runCatching { Color(hex.toColorInt()) }.getOrDefault(Color.Gray)
+                                        Box(
+                                            modifier = Modifier.size(24.dp)
+                                                .background(c, CircleShape)
+                                                .then(if (inlineCatColor == hex) Modifier.border(2.dp, Color.Black, CircleShape) else Modifier)
+                                                .clickable { inlineCatColor = hex }
+                                        )
+                                    }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(modifier = Modifier.weight(1f), onClick = { showInlineCatForm = false }) { Text("Cancel", fontSize = 13.sp) }
+                                    Button(
+                                        modifier = Modifier.weight(1f),
+                                        onClick  = {
+                                            if (inlineCatName.isNotBlank()) {
+                                                onAddCategory(inlineCatName, form.type, inlineCatColor) { newCat ->
+                                                    form = form.copy(categoryId = newCat.id)
+                                                    showInlineCatForm = false
+                                                }
                                             }
-                                        }
-                                    },
-                                    colors   = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                ) { Text("Save", fontSize = 13.sp) }
+                                        },
+                                        colors   = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                    ) { Text("Save", fontSize = 13.sp) }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // ── Description ────────────────────────────────────────────
             OutlinedTextField(
                 value         = form.description,
                 onValueChange = { form = form.copy(description = it) },
-                label         = { Text("Description (optional)") },
+                label         = { Text("Note (optional)") },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(10.dp),
                 maxLines      = 2,
             )
 
-            // ── Date field ─────────────────────────────────────────────
-            OutlinedTextField(
-                value         = form.date,
-                onValueChange = { form = form.copy(date = it) },
-                label         = { Text("Date (yyyy-MM-dd)") },
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(10.dp),
-                singleLine    = true,
-                trailingIcon  = { Icon(Icons.Default.CalendarToday, contentDescription = null) },
+            // Date Picker Field
+            DateSelectionField(
+                label = "Date (yyyy-MM-dd)",
+                dateString = form.date,
+                onDateSelected = { form = form.copy(date = it) }
             )
 
-            // ── Charges field — mirrors ChargesField component in page.js ──
             ChargesSection(
                 chargeAmount = form.chargeAmount,
                 chargeNote   = form.chargeNote,
@@ -784,10 +836,9 @@ private fun AddEditTransactionSheet(
                 onNoteChange   = { form = form.copy(chargeNote = it) },
             )
 
-            // ── Save button ────────────────────────────────────────────
             Button(
                 onClick   = { onSave(form) },
-                enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && form.categoryId.isNotBlank(),
+                enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && (if (isTransfer) form.toAccountId.isNotBlank() else form.categoryId.isNotBlank()),
                 modifier  = Modifier.fillMaxWidth().height(52.dp),
                 shape     = RoundedCornerShape(12.dp),
                 colors    = ButtonDefaults.buttonColors(containerColor = accentColor),
@@ -797,14 +848,75 @@ private fun AddEditTransactionSheet(
                     Spacer(Modifier.width(8.dp))
                     Text("Saving…", fontSize = 15.sp)
                 } else {
-                    Text(if (editing != null) "Update Transaction" else "Add Transaction", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (editing != null) "Update Record" else "Add Record", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
     }
 }
 
-// ── Charges section — mirrors ChargesField component in page.js ──
+// ── Custom Native Date Picker Field ──
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateSelectionField(
+    label: String,
+    dateString: String,
+    onDateSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = runCatching {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            sdf.parse(dateString)?.time
+        }.getOrNull()
+    )
+
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value = dateString,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            singleLine = true,
+            trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null) }
+        )
+        // Invisible overlay to intercept clicks perfectly
+        Box(modifier = Modifier.matchParentSize().clickable { showPicker = true })
+    }
+
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                        }
+                        onDateSelected(sdf.format(Date(millis)))
+                    }
+                    showPicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+
+// ── Charges section ──
 @Composable
 private fun ChargesSection(
     chargeAmount: String,
@@ -854,6 +966,7 @@ private fun ChargesSection(
                         modifier      = Modifier.weight(1f),
                         shape         = RoundedCornerShape(8.dp),
                         singleLine    = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     OutlinedTextField(
                         value         = chargeNote,
@@ -876,7 +989,6 @@ private fun ChargesSection(
 }
 
 // ─── Filter Sheet ─────────────────────────────────────────────────────────────
-// Mirrors: filter panel / modal in page.js
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -909,14 +1021,12 @@ private fun FilterSheet(
                 TextButton(onClick = { onClearAll(); onDismiss() }) { Text("Clear all") }
             }
 
-            // Type
             FilterSection("Type") {
                 listOf("All", "Income", "Expense").forEach { t ->
                     FilterChip(selected = state.filterType == t, onClick = { onApplyType(t) }, label = { Text(t, fontSize = 13.sp) }, modifier = Modifier.padding(end = 6.dp))
                 }
             }
 
-            // Account
             FilterSection("Account") {
                 val opts = listOf(AccountItem(id = "all", name = "All Accounts")) + state.accounts
                 LabeledDropdown(
@@ -927,7 +1037,6 @@ private fun FilterSheet(
                 )
             }
 
-            // Category
             FilterSection("Category") {
                 val cats = listOf(CategoryItem(id = "all", name = "All Categories", type = "")) + state.categories
                 LabeledDropdown(
@@ -938,26 +1047,19 @@ private fun FilterSheet(
                 )
             }
 
-            // Date range
             FilterSection("Date Range") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value         = startDate,
-                        onValueChange = { startDate = it },
-                        label         = { Text("From", fontSize = 12.sp) },
-                        placeholder   = { Text("yyyy-MM-dd", fontSize = 12.sp) },
-                        modifier      = Modifier.weight(1f),
-                        shape         = RoundedCornerShape(10.dp),
-                        singleLine    = true,
+                    DateSelectionField(
+                        label = "From",
+                        dateString = startDate,
+                        onDateSelected = { startDate = it },
+                        modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
-                        value         = endDate,
-                        onValueChange = { endDate = it },
-                        label         = { Text("To", fontSize = 12.sp) },
-                        placeholder   = { Text("yyyy-MM-dd", fontSize = 12.sp) },
-                        modifier      = Modifier.weight(1f),
-                        shape         = RoundedCornerShape(10.dp),
-                        singleLine    = true,
+                    DateSelectionField(
+                        label = "To",
+                        dateString = endDate,
+                        onDateSelected = { endDate = it },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -979,8 +1081,6 @@ private fun FilterSection(title: String, content: @Composable RowScope.() -> Uni
     }
 }
 
-// ─── Reusable Labeled Dropdown ────────────────────────────────────────────────
-
 @Composable
 private fun LabeledDropdown(
     label: String,
@@ -995,10 +1095,12 @@ private fun LabeledDropdown(
             onValueChange = {},
             readOnly      = true,
             label         = { Text(label) },
-            modifier      = Modifier.fillMaxWidth().clickable { expanded = true },
+            modifier      = Modifier.fillMaxWidth(),
             shape         = RoundedCornerShape(10.dp),
             trailingIcon  = { Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
         )
+        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (id, name) ->
                 DropdownMenuItem(text = { Text(name, fontSize = 14.sp) }, onClick = { onSelect(id); expanded = false })

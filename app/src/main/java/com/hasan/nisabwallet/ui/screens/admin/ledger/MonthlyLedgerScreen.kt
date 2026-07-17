@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -778,10 +782,10 @@ private fun IncomeRowEditor(
         )
         Spacer(Modifier.width(4.dp))
 
-        DenseTextField(value = row.desc, onValueChange = onDesc, placeholder = "Desc...", modifier = Modifier.weight(1f))
+        DenseTextField(value = row.desc, onValueChange = onDesc, placeholder = "Desc...", focusColor = Emerald600, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(4.dp))
 
-        DenseTextField(value = row.amount, onValueChange = onAmount, placeholder = "0", modifier = Modifier.width(76.dp), numeric = true, alignEnd = true)
+        DenseTextField(value = row.amount, onValueChange = onAmount, placeholder = "0", focusColor = Emerald600, modifier = Modifier.width(76.dp), numeric = true, alignEnd = true)
         Spacer(Modifier.width(4.dp))
 
         RowActions(
@@ -802,25 +806,28 @@ private fun CompactCategoryDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val catName = categories.find { it.id == selectedId }?.name ?: "Select…"
-    
+
     Box(modifier = modifier) {
-        OutlinedTextField(
-            value = catName,
-            onValueChange = {},
-            readOnly = true,
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp)) },
-            textStyle = TextStyle(fontSize = 12.sp, color = if (selectedId.isBlank()) Gray400 else Gray800),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().height(42.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Transparent,
-                focusedBorderColor = Emerald600,
-                unfocusedContainerColor = Color.Transparent,
-                focusedContainerColor = Color.White,
-            ),
-            shape = RoundedCornerShape(6.dp),
-        )
-        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .background(Color.White, RoundedCornerShape(6.dp))
+                .border(1.dp, Gray300, RoundedCornerShape(6.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = catName,
+                fontSize = 13.sp,
+                color = if (selectedId.isBlank()) Gray400 else Gray900,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray500, modifier = Modifier.size(16.dp))
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             categories.forEach { c ->
                 DropdownMenuItem(text = { Text(c.name, fontSize = 13.sp) }, onClick = { onSelect(c.id); expanded = false })
@@ -925,7 +932,7 @@ private fun ExpenseCategoryCard(
                         val rows = expenseRowsForDay(state, cat.id, day)
                         val isToday = isCurMonth && day == today
                         val daySum = rows.sumOf { it.amountDouble }
-                        
+
                         rows.forEachIndexed { ri, row ->
                             ExpenseRowEditor(
                                 day = day,
@@ -1006,9 +1013,9 @@ private fun ExpenseRowEditor(
             }
         }
 
-        DenseTextField(value = row.desc, onValueChange = onDesc, placeholder = "Description...", modifier = Modifier.weight(1f))
+        DenseTextField(value = row.desc, onValueChange = onDesc, placeholder = "Description...", focusColor = Blue600, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(6.dp))
-        DenseTextField(value = row.amount, onValueChange = onAmount, placeholder = "0", modifier = Modifier.width(76.dp), numeric = true, alignEnd = true)
+        DenseTextField(value = row.amount, onValueChange = onAmount, placeholder = "0", focusColor = Blue600, modifier = Modifier.width(76.dp), numeric = true, alignEnd = true)
         Spacer(Modifier.width(2.dp))
 
         RowActions(
@@ -1058,7 +1065,7 @@ private fun RowActions(
     }
 }
 
-// Compact underline-ish text field
+// Custom perfectly centered text field with explicit borders
 @Composable
 private fun DenseTextField(
     value: String,
@@ -1067,22 +1074,51 @@ private fun DenseTextField(
     modifier: Modifier = Modifier,
     numeric: Boolean = false,
     alignEnd: Boolean = false,
+    focusColor: Color = Blue600,
 ) {
-    OutlinedTextField(
+    var isFocused by remember { mutableStateOf(false) }
+
+    BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.height(42.dp),
-        placeholder = { Text(placeholder, fontSize = 12.sp, color = Gray300) },
-        textStyle = TextStyle(fontSize = 12.sp, textAlign = if (alignEnd) TextAlign.End else TextAlign.Start, fontWeight = if (numeric) FontWeight.Medium else FontWeight.Normal),
+        modifier = modifier
+            .height(38.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        textStyle = TextStyle(
+            fontSize = 13.sp,
+            color = Gray900,
+            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+            fontWeight = if (numeric) FontWeight.SemiBold else FontWeight.Normal
+        ),
         singleLine = true,
         keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = Color.Transparent,
-            focusedBorderColor = Blue600,
-            unfocusedContainerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
-        ),
-        shape = RoundedCornerShape(6.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White, RoundedCornerShape(6.dp))
+                    .border(
+                        width = if (isFocused) 1.5.dp else 1.dp,
+                        color = if (isFocused) focusColor else Gray300,
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            color = Gray400,
+                            fontSize = 13.sp,
+                            textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
     )
 }
 
@@ -1140,7 +1176,13 @@ private fun CategorySettingsSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        // ADDED verticalScroll(rememberScrollState()) HERE
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 24.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1350,21 +1392,26 @@ private fun AccountDropdown(accounts: List<LedgerAccount>, selectedId: String, o
     var expanded by remember { mutableStateOf(false) }
     val selected = accounts.find { it.id == selectedId }
     Box {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, accentBorder),
-            color = Color.White,
-            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .background(Color.White, RoundedCornerShape(6.dp))
+                .border(1.dp, accentBorder, RoundedCornerShape(6.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    selected?.let { "${it.name} — ${fmtMoney(it.balance)}" } ?: "Select account…",
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                    color = if (selected != null) Gray800 else Gray400,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray400, modifier = Modifier.size(16.dp))
-            }
+            Text(
+                text = selected?.let { "${it.name} — ${fmtMoney(it.balance)}" } ?: "Select account…",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected != null) Gray800 else Gray400,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Gray400, modifier = Modifier.size(16.dp))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             accounts.forEach { acc ->

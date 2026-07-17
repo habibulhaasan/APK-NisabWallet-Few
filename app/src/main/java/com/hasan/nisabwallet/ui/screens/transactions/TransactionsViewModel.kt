@@ -1,9 +1,5 @@
 package com.hasan.nisabwallet.ui.screens.transactions
 
-// Converted from: src/app/dashboard/transactions/page.js (68 KB)
-// Source deps: firestoreCollections.js (getAccounts, updateAccount, generateId),
-//              goalUtils.js (getAvailableBalance), jewelleryCollections.js (unmarkSold)
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -33,7 +29,7 @@ data class TransactionsUiState(
     val accounts: List<AccountItem> = emptyList(),
     val categories: List<CategoryItem> = emptyList(),
 
-    // Filters — mirrors filter state in page.js
+    // Filters
     val filterType: String = "All",          // "All" | "Income" | "Expense"
     val filterAccountId: String = "all",
     val filterCategoryId: String = "all",
@@ -41,7 +37,7 @@ data class TransactionsUiState(
     val filterEndDate: String = "",
     val searchQuery: String = "",
 
-    // Monthly summary — mirrors thisMonthIncome / thisMonthExpense
+    // Monthly summary
     val thisMonthIncome: Double = 0.0,
     val thisMonthExpense: Double = 0.0,
 
@@ -70,6 +66,14 @@ data class Transaction(
     val chargeAmount: Double = 0.0,
     val chargeNote: String = "",
     val createdAtMillis: Long = 0L,
+
+    // Transfer specific fields
+    val isTransfer: Boolean = false,
+    val originalId: String? = null,
+    val transferDirection: String? = null, // "from" | "to"
+    val relatedAccountId: String? = null,
+    val relatedAccountName: String? = null,
+    val originalDescription: String? = null,
 )
 
 data class AccountItem(
@@ -90,9 +94,10 @@ data class CategoryItem(
 
 // Form state for AddEditTransactionSheet
 data class TransactionForm(
-    val type: String = "Expense",
+    val type: String = "Expense", // "Income", "Expense", "Transfer"
     val amount: String = "",
     val accountId: String = "",
+    val toAccountId: String = "", // Used only for transfers
     val categoryId: String = "",
     val description: String = "",
     val date: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
@@ -125,13 +130,12 @@ class TransactionsViewModel @Inject constructor(
 
     fun refresh() = loadAll()
 
-    // ── loadAll — mirrors initial useEffect + loadTransactions/loadAccounts/loadCategories ──
     private fun loadAll() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val transactions = loadTransactions(uid)
+                val transactions = loadTransactionsAndTransfers(uid)
                 val accounts     = loadAccounts(uid)
                 val categories   = loadCategories(uid)
                 val monthSummary = computeMonthSummary(transactions)
@@ -154,16 +158,20 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── loadTransactions — queries Firestore ordered by date desc ──
-    // ── loadTransactions — queries Firestore and sorts locally to avoid Index errors ──
-    private suspend fun loadTransactions(uid: String): List<Transaction> {
-        val snap = db.collection("users").document(uid)
-            .collection("transactions")
-            // Single orderBy doesn't require a special Firebase Composite Index
-            .orderBy("date", Query.Direction.DESCENDING)
-            .get().await()
+    private suspend fun loadTransactionsAndTransfers(uid: String): List<Transaction> {
+        // Query transactions with fallback for caching/index errors
+        val txSnap = try {
+            db.collection("users").document(uid)
+                .collection("transactions")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .get().await()
+        } catch (e: Exception) {
+            db.collection("users").document(uid)
+                .collection("transactions")
+                .get().await()
+        }
 
-        return snap.documents.map { d ->
+        val normalTxs = txSnap.documents.map { d ->
             Transaction(
                 id            = d.id,
                 type          = d.getString("type") ?: "",
@@ -178,10 +186,63 @@ class TransactionsViewModel @Inject constructor(
                 chargeNote    = d.getString("chargeNote") ?: "",
                 createdAtMillis = d.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
             )
-        }.sortedByDescending { it.createdAtMillis } // Handle the tie-breaker sort in Kotlin!
+        }
+
+        // Query transfers with fallback
+        val trSnap = try {
+            db.collection("users").document(uid)
+                .collection("transfers")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .get().await()
+        } catch (e: Exception) {
+            db.collection("users").document(uid)
+                .collection("transfers")
+                .get().await()
+        }
+
+        val expandedTransfers = mutableListOf<Transaction>()
+
+        trSnap.documents.forEach { t ->
+            val id = t.id
+            val amt = t.getDouble("amount") ?: 0.0
+            val fromId = t.getString("fromAccountId") ?: ""
+            val fromName = t.getString("fromAccountName") ?: ""
+            val toId = t.getString("toAccountId") ?: ""
+            val toName = t.getString("toAccountName") ?: ""
+            val desc = t.getString("description") ?: ""
+            val date = t.getString("date") ?: ""
+            val ts = t.getTimestamp("createdAt")?.toDate()?.time ?: 0L
+
+            // Expand into Expense (From)
+            expandedTransfers.add(
+                Transaction(
+                    id = "$id-expense", originalId = id, isTransfer = true,
+                    type = "Expense", amount = amt, accountId = fromId,
+                    description = desc.ifBlank { "Transfer to $toName" },
+                    originalDescription = desc,
+                    date = date, createdAtMillis = ts,
+                    transferDirection = "from", relatedAccountId = toId, relatedAccountName = toName
+                )
+            )
+            // Expand into Income (To)
+            expandedTransfers.add(
+                Transaction(
+                    id = "$id-income", originalId = id, isTransfer = true,
+                    type = "Income", amount = amt, accountId = toId,
+                    description = desc.ifBlank { "Transfer from $fromName" },
+                    originalDescription = desc,
+                    date = date, createdAtMillis = ts,
+                    transferDirection = "to", relatedAccountId = fromId, relatedAccountName = fromName
+                )
+            )
+        }
+
+        // Combine and resolve the secondary sorting locally
+        return (normalTxs + expandedTransfers).sortedWith(
+            compareByDescending<Transaction> { it.date }.thenByDescending { it.createdAtMillis }
+        )
     }
 
-    // ── loadAccounts — mirrors getAccounts() from firestoreCollections.js ──
     private suspend fun loadAccounts(uid: String): List<AccountItem> {
         val snap = db.collection("users").document(uid).collection("accounts").get().await()
         return snap.documents.map { d ->
@@ -194,7 +255,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── loadCategories — mirrors category load in page.js ──
     private suspend fun loadCategories(uid: String): List<CategoryItem> {
         val snap = db.collection("users").document(uid).collection("categories").get().await()
         return snap.documents.map { d ->
@@ -209,7 +269,6 @@ class TransactionsViewModel @Inject constructor(
         }.sortedBy { it.name }
     }
 
-    // ── Month summary — mirrors thisMonthIncome / thisMonthExpense in page.js ──
     private fun computeMonthSummary(transactions: List<Transaction>): Pair<Double, Double> {
         val cal   = Calendar.getInstance()
         val year  = cal.get(Calendar.YEAR)
@@ -221,7 +280,8 @@ class TransactionsViewModel @Inject constructor(
         var income  = 0.0
         var expense = 0.0
         transactions.forEach { tx ->
-            if (tx.date in start..end) {
+            // Skip transfers in the summary
+            if (!tx.isTransfer && tx.date in start..end) {
                 if (tx.type == "Income")  income  += tx.amount
                 if (tx.type == "Expense") expense += tx.amount
             }
@@ -229,7 +289,6 @@ class TransactionsViewModel @Inject constructor(
         return Pair(income, expense)
     }
 
-    // ── Filter actions — mirrors filter state in page.js ──
     fun setSearchQuery(query: String) {
         _uiState.update { state ->
             val filtered = applyFilters(state.transactions, state.copy(searchQuery = query))
@@ -279,19 +338,16 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── applyFilters — mirrors client-side filtering logic in page.js ──
     private fun applyFilters(transactions: List<Transaction>, state: TransactionsUiState): List<Transaction> {
         return transactions.filter { tx ->
             (state.filterType == "All" || tx.type == state.filterType) &&
-            (state.filterAccountId == "all" || tx.accountId == state.filterAccountId) &&
-            (state.filterCategoryId == "all" || tx.categoryId == state.filterCategoryId) &&
-            (state.filterStartDate.isBlank() || tx.date >= state.filterStartDate) &&
-            (state.filterEndDate.isBlank() || tx.date <= state.filterEndDate) &&
-            (state.searchQuery.isBlank() || tx.description.contains(state.searchQuery, ignoreCase = true))
+                    (state.filterAccountId == "all" || tx.accountId == state.filterAccountId) &&
+                    (state.filterCategoryId == "all" || tx.categoryId == state.filterCategoryId) &&
+                    (state.filterStartDate.isBlank() || tx.date >= state.filterStartDate) &&
+                    (state.filterEndDate.isBlank() || tx.date <= state.filterEndDate) &&
+                    (state.searchQuery.isBlank() || tx.description.contains(state.searchQuery, ignoreCase = true) || getCategoryName(tx.categoryId).contains(state.searchQuery, ignoreCase = true))
         }
     }
-
-    // ── Sheet/dialog actions ────────────────────────────────────────────────
 
     fun showAddSheet(defaultType: String = "Expense") {
         _uiState.update { it.copy(showAddEditSheet = true, editingTransaction = null) }
@@ -318,76 +374,111 @@ class TransactionsViewModel @Inject constructor(
     }
     fun hideDeleteConfirm() = _uiState.update { it.copy(showDeleteConfirm = false, deletingTransaction = null) }
 
-    // ── addTransaction — mirrors handleAddTransaction() in page.js ──────────
-    // 1. Validates form
-    // 2. Writes to Firestore transactions collection
-    // 3. Updates account balance (+ for income, - for expense)
-    // 4. If chargeAmount > 0: creates a separate "Fees & Charges" expense transaction
-    // 5. Updates local state
-
     fun addTransaction(form: TransactionForm) {
         val uid = auth.currentUser?.uid ?: return
-        if (form.amount.isBlank() || form.accountId.isBlank() || form.categoryId.isBlank()) {
-            viewModelScope.launch { emit(TransactionEvent.ShowToast("Fill in all required fields", true)) }
-            return
+
+        if (form.type == "Transfer") {
+            if (form.amount.isBlank() || form.accountId.isBlank() || form.toAccountId.isBlank()) {
+                emit(TransactionEvent.ShowToast("Fill in all required fields", true))
+                return
+            }
+            if (form.accountId == form.toAccountId) {
+                emit(TransactionEvent.ShowToast("Cannot transfer to the same account", true))
+                return
+            }
+        } else {
+            if (form.amount.isBlank() || form.accountId.isBlank() || form.categoryId.isBlank()) {
+                emit(TransactionEvent.ShowToast("Fill in all required fields", true))
+                return
+            }
         }
+
         val amount = form.amount.toDoubleOrNull() ?: run {
-            viewModelScope.launch { emit(TransactionEvent.ShowToast("Invalid amount", true)) }
+            emit(TransactionEvent.ShowToast("Invalid amount", true))
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                val txData = hashMapOf(
-                    "type"         to form.type,
-                    "amount"       to amount,
-                    "accountId"    to form.accountId,
-                    "categoryId"   to form.categoryId,
-                    "description"  to form.description.trim(),
-                    "date"         to form.date,
-                    "isCharge"     to false,
-                    "isRiba"       to false,
-                    "chargeAmount" to (form.chargeAmount.toDoubleOrNull() ?: 0.0),
-                    "chargeNote"   to form.chargeNote.trim(),
-                    "createdAt"    to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                )
-                db.collection("users").document(uid).collection("transactions").add(txData).await()
+                if (form.type == "Transfer") {
+                    val fromAcc = _uiState.value.accounts.find { it.id == form.accountId }
+                    val toAcc = _uiState.value.accounts.find { it.id == form.toAccountId }
+                    if (fromAcc == null || toAcc == null) throw Exception("Invalid accounts")
 
-                // ── Update account balance — mirrors updateAccount() in page.js ──
-                val account = _uiState.value.accounts.find { it.id == form.accountId }
-                if (account != null) {
-                    val delta = if (form.type == "Income") amount else -amount
-                    db.collection("users").document(uid).collection("accounts")
-                        .document(form.accountId)
-                        .update("balance", account.balance + delta).await()
-                }
-
-                // ── Record charge as separate Expense (mirrors page.js charge logic) ──
-                val chargeAmt = form.chargeAmount.toDoubleOrNull() ?: 0.0
-                if (chargeAmt > 0) {
-                    val feesCategory = getOrCreateFeesCategory(uid)
-                    val chargeData = hashMapOf(
-                        "type"        to "Expense",
-                        "amount"      to chargeAmt,
-                        "accountId"   to form.accountId,
-                        "categoryId"  to feesCategory,
-                        "description" to (form.chargeNote.ifBlank { "Related charges / fees" }),
-                        "date"        to form.date,
-                        "isCharge"    to true,
-                        "createdAt"   to FieldValue.serverTimestamp(),
+                    val transferData = hashMapOf(
+                        "fromAccountId" to fromAcc.id,
+                        "fromAccountName" to fromAcc.name,
+                        "toAccountId" to toAcc.id,
+                        "toAccountName" to toAcc.name,
+                        "amount" to amount,
+                        "description" to form.description.trim(),
+                        "date" to form.date,
+                        "createdAt" to FieldValue.serverTimestamp()
                     )
-                    db.collection("users").document(uid).collection("transactions").add(chargeData).await()
-                    // Deduct charge from account balance too
-                    val acc = _uiState.value.accounts.find { it.id == form.accountId }
-                    if (acc != null) {
+                    db.collection("users").document(uid).collection("transfers").add(transferData).await()
+
+                    // Update balances
+                    db.collection("users").document(uid).collection("accounts").document(fromAcc.id)
+                        .update("balance", fromAcc.balance - amount).await()
+                    db.collection("users").document(uid).collection("accounts").document(toAcc.id)
+                        .update("balance", toAcc.balance + amount).await()
+
+                    // Charge handling for transfers
+                    val chargeAmt = form.chargeAmount.toDoubleOrNull() ?: 0.0
+                    if (chargeAmt > 0) {
+                        val feesCategory = getOrCreateFeesCategory(uid)
+                        db.collection("users").document(uid).collection("transactions").add(hashMapOf(
+                            "type" to "Expense", "amount" to chargeAmt, "accountId" to form.accountId,
+                            "categoryId" to feesCategory, "description" to (form.chargeNote.ifBlank { "Transfer charge" }),
+                            "date" to form.date, "isCharge" to true, "createdAt" to FieldValue.serverTimestamp()
+                        )).await()
+                        db.collection("users").document(uid).collection("accounts").document(form.accountId)
+                            .update("balance", (fromAcc.balance - amount) - chargeAmt).await()
+                    }
+                    emit(TransactionEvent.ShowToast("Transfer completed!"))
+                } else {
+                    val txData = hashMapOf(
+                        "type"         to form.type,
+                        "amount"       to amount,
+                        "accountId"    to form.accountId,
+                        "categoryId"   to form.categoryId,
+                        "description"  to form.description.trim(),
+                        "date"         to form.date,
+                        "isCharge"     to false,
+                        "isRiba"       to false,
+                        "chargeAmount" to (form.chargeAmount.toDoubleOrNull() ?: 0.0),
+                        "chargeNote"   to form.chargeNote.trim(),
+                        "createdAt"    to FieldValue.serverTimestamp(),
+                    )
+                    db.collection("users").document(uid).collection("transactions").add(txData).await()
+
+                    val account = _uiState.value.accounts.find { it.id == form.accountId }
+                    if (account != null) {
+                        val delta = if (form.type == "Income") amount else -amount
                         db.collection("users").document(uid).collection("accounts")
                             .document(form.accountId)
-                            .update("balance", acc.balance - chargeAmt).await()
+                            .update("balance", account.balance + delta).await()
                     }
+
+                    val chargeAmt = form.chargeAmount.toDoubleOrNull() ?: 0.0
+                    if (chargeAmt > 0) {
+                        val feesCategory = getOrCreateFeesCategory(uid)
+                        db.collection("users").document(uid).collection("transactions").add(hashMapOf(
+                            "type" to "Expense", "amount" to chargeAmt, "accountId" to form.accountId,
+                            "categoryId" to feesCategory, "description" to (form.chargeNote.ifBlank { "Related charges / fees" }),
+                            "date" to form.date, "isCharge" to true, "createdAt" to FieldValue.serverTimestamp()
+                        )).await()
+
+                        val acc = _uiState.value.accounts.find { it.id == form.accountId }
+                        if (acc != null) {
+                            db.collection("users").document(uid).collection("accounts").document(form.accountId)
+                                .update("balance", acc.balance - chargeAmt).await()
+                        }
+                    }
+                    emit(TransactionEvent.ShowToast("Transaction added!"))
                 }
 
-                emit(TransactionEvent.ShowToast("Transaction added!"))
                 hideAddEditSheet()
                 loadAll()
             } catch (e: Exception) {
@@ -398,8 +489,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── updateTransaction — mirrors handleUpdateTransaction() in page.js ────
-    // Reverses the old balance effect, then applies the new one
     fun updateTransaction(transactionId: String, form: TransactionForm) {
         val uid = auth.currentUser?.uid ?: return
         val oldTx = _uiState.value.transactions.find { it.id == transactionId } ?: return
@@ -408,41 +497,80 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                // Reverse old balance effect
-                val oldAccount = _uiState.value.accounts.find { it.id == oldTx.accountId }
-                if (oldAccount != null) {
-                    val reversal = if (oldTx.type == "Income") -oldTx.amount else oldTx.amount
-                    db.collection("users").document(uid).collection("accounts")
-                        .document(oldTx.accountId)
-                        .update("balance", oldAccount.balance + reversal).await()
+                if (oldTx.isTransfer) {
+                    val origId = oldTx.originalId ?: throw Exception("Missing transfer ID")
+
+                    // Revert old balances
+                    val oldFromId = if (oldTx.transferDirection == "from") oldTx.accountId else oldTx.relatedAccountId!!
+                    val oldToId = if (oldTx.transferDirection == "to") oldTx.accountId else oldTx.relatedAccountId!!
+                    val oldAmt = oldTx.amount
+
+                    val oldFromAcc = _uiState.value.accounts.find { it.id == oldFromId }
+                    val oldToAcc = _uiState.value.accounts.find { it.id == oldToId }
+
+                    if (oldFromAcc != null) db.collection("users").document(uid).collection("accounts")
+                        .document(oldFromId).update("balance", oldFromAcc.balance + oldAmt).await()
+                    if (oldToAcc != null) db.collection("users").document(uid).collection("accounts")
+                        .document(oldToId).update("balance", oldToAcc.balance - oldAmt).await()
+
+                    // Apply new transfer doc
+                    val fromAcc = _uiState.value.accounts.find { it.id == form.accountId }
+                    val toAcc = _uiState.value.accounts.find { it.id == form.toAccountId }
+
+                    db.collection("users").document(uid).collection("transfers").document(origId).update(
+                        mapOf(
+                            "amount" to newAmount,
+                            "fromAccountId" to form.accountId,
+                            "fromAccountName" to (fromAcc?.name ?: ""),
+                            "toAccountId" to form.toAccountId,
+                            "toAccountName" to (toAcc?.name ?: ""),
+                            "description" to form.description.trim(),
+                            "date" to form.date,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+
+                    // Apply new balances
+                    val freshFromBal = db.collection("users").document(uid).collection("accounts").document(form.accountId).get().await().getDouble("balance") ?: 0.0
+                    db.collection("users").document(uid).collection("accounts").document(form.accountId).update("balance", freshFromBal - newAmount).await()
+
+                    val freshToBal = db.collection("users").document(uid).collection("accounts").document(form.toAccountId).get().await().getDouble("balance") ?: 0.0
+                    db.collection("users").document(uid).collection("accounts").document(form.toAccountId).update("balance", freshToBal + newAmount).await()
+
+                    emit(TransactionEvent.ShowToast("Transfer updated!"))
+                } else {
+                    val oldAccount = _uiState.value.accounts.find { it.id == oldTx.accountId }
+                    if (oldAccount != null) {
+                        val reversal = if (oldTx.type == "Income") -oldTx.amount else oldTx.amount
+                        db.collection("users").document(uid).collection("accounts")
+                            .document(oldTx.accountId)
+                            .update("balance", oldAccount.balance + reversal).await()
+                    }
+
+                    val txData = mapOf(
+                        "type"        to form.type,
+                        "amount"      to newAmount,
+                        "accountId"   to form.accountId,
+                        "categoryId"  to form.categoryId,
+                        "description" to form.description.trim(),
+                        "date"        to form.date,
+                        "updatedAt"   to FieldValue.serverTimestamp(),
+                    )
+                    db.collection("users").document(uid).collection("transactions")
+                        .document(transactionId).update(txData).await()
+
+                    val newAccount = _uiState.value.accounts.find { it.id == form.accountId }
+                    if (newAccount != null) {
+                        val delta = if (form.type == "Income") newAmount else -newAmount
+                        val freshBalance = db.collection("users").document(uid).collection("accounts")
+                            .document(form.accountId).get().await().getDouble("balance") ?: 0.0
+                        db.collection("users").document(uid).collection("accounts")
+                            .document(form.accountId)
+                            .update("balance", freshBalance + delta).await()
+                    }
+                    emit(TransactionEvent.ShowToast("Transaction updated!"))
                 }
 
-                // Write updated transaction
-                val txData = mapOf(
-                    "type"        to form.type,
-                    "amount"      to newAmount,
-                    "accountId"   to form.accountId,
-                    "categoryId"  to form.categoryId,
-                    "description" to form.description.trim(),
-                    "date"        to form.date,
-                    "updatedAt"   to FieldValue.serverTimestamp(),
-                )
-                db.collection("users").document(uid).collection("transactions")
-                    .document(transactionId).update(txData).await()
-
-                // Apply new balance effect
-                val newAccount = _uiState.value.accounts.find { it.id == form.accountId }
-                if (newAccount != null) {
-                    val delta = if (form.type == "Income") newAmount else -newAmount
-                    // Re-fetch balance after reversal
-                    val freshBalance = db.collection("users").document(uid).collection("accounts")
-                        .document(form.accountId).get().await().getDouble("balance") ?: 0.0
-                    db.collection("users").document(uid).collection("accounts")
-                        .document(form.accountId)
-                        .update("balance", freshBalance + delta).await()
-                }
-
-                emit(TransactionEvent.ShowToast("Transaction updated!"))
                 hideAddEditSheet()
                 loadAll()
             } catch (e: Exception) {
@@ -453,8 +581,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── deleteTransaction — mirrors handleDeleteTransaction() in page.js ────
-    // Deletes the transaction and reverses its effect on account balance
     fun deleteTransaction() {
         val uid = auth.currentUser?.uid ?: return
         val tx  = _uiState.value.deletingTransaction ?: return
@@ -462,18 +588,30 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                // Reverse balance effect
-                val account = _uiState.value.accounts.find { it.id == tx.accountId }
-                if (account != null) {
-                    val reversal = if (tx.type == "Income") -tx.amount else tx.amount
-                    db.collection("users").document(uid).collection("accounts")
-                        .document(tx.accountId)
-                        .update("balance", account.balance + reversal).await()
-                }
+                if (tx.isTransfer) {
+                    val origId = tx.originalId ?: throw Exception("Missing transfer ID")
+                    val fromId = if (tx.transferDirection == "from") tx.accountId else tx.relatedAccountId!!
+                    val toId = if (tx.transferDirection == "to") tx.accountId else tx.relatedAccountId!!
 
-                // Delete from Firestore
-                db.collection("users").document(uid).collection("transactions")
-                    .document(tx.id).delete().await()
+                    val oldFromAcc = _uiState.value.accounts.find { it.id == fromId }
+                    val oldToAcc = _uiState.value.accounts.find { it.id == toId }
+
+                    if (oldFromAcc != null) db.collection("users").document(uid).collection("accounts")
+                        .document(fromId).update("balance", oldFromAcc.balance + tx.amount).await()
+                    if (oldToAcc != null) db.collection("users").document(uid).collection("accounts")
+                        .document(toId).update("balance", oldToAcc.balance - tx.amount).await()
+
+                    db.collection("users").document(uid).collection("transfers").document(origId).delete().await()
+                } else {
+                    val account = _uiState.value.accounts.find { it.id == tx.accountId }
+                    if (account != null) {
+                        val reversal = if (tx.type == "Income") -tx.amount else tx.amount
+                        db.collection("users").document(uid).collection("accounts")
+                            .document(tx.accountId)
+                            .update("balance", account.balance + reversal).await()
+                    }
+                    db.collection("users").document(uid).collection("transactions").document(tx.id).delete().await()
+                }
 
                 emit(TransactionEvent.ShowToast("Transaction deleted"))
                 hideDeleteConfirm()
@@ -486,7 +624,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── addCategory (inline) — mirrors InlineCategoryForm.handleSave() in page.js ──
     fun addCategoryInline(name: String, type: String, color: String, onAdded: (CategoryItem) -> Unit) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -513,7 +650,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    // ── Helper: getOrCreateFeesCategory — mirrors getOrCreateSystemCategory() in page.js ──
     private suspend fun getOrCreateFeesCategory(uid: String): String {
         val snap = db.collection("users").document(uid).collection("categories")
             .whereEqualTo("name", "Fees & Charges").get().await()
@@ -529,12 +665,10 @@ class TransactionsViewModel @Inject constructor(
         return db.collection("users").document(uid).collection("categories").add(data).await().id
     }
 
-    // Helper: emit events
     private fun emit(event: TransactionEvent) {
         viewModelScope.launch { _events.emit(event) }
     }
 
-    // ── Helper: get category name / color ──
     fun getCategoryName(id: String): String = _uiState.value.categories.find { it.id == id }?.name ?: ""
     fun getCategoryColor(id: String): String = _uiState.value.categories.find { it.id == id }?.color ?: "#6B7280"
     fun getAccountName(id: String): String = _uiState.value.accounts.find { it.id == id }?.name ?: "Unknown"
