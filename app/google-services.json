@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "572595597472",
+    "project_id": "sharp-crossbar-448311-u9",
+    "storage_bucket": "sharp-crossbar-448311-u9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:572595597472:android:b884a4f5e246849f4099c5",
+        "android_client_info": {
+          "package_name": "com.hasan.nisabwallet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "572595597472-uu72in9o77gavjuktfgpr5255uej7kq9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvCwB9_G4R4PmirS8jvw6OpzoIDWvVvkY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "572595597472-uu72in9o77gavjuktfgpr5255uej7kq9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

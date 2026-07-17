@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.NisabWallet" parent="android:Theme.DeviceDefault.NoActionBar" />
+</resources>
