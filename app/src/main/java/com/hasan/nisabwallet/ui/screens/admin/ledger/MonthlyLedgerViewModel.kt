@@ -1,15 +1,10 @@
 package com.hasan.nisabwallet.ui.screens.admin.ledger
 
-// Converted from: src/app/dashboard/admin/monthly-ledger/page.js
-// Source deps: firestoreCollections.js (getAccounts, updateAccount),
-//              budgetCollections.js (getBudgetsForMonth, addBudget, updateBudget),
-//              adminUtils.js (checkIsAdmin)
-// Admin-only screen — must verify admin status before rendering
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,16 +19,14 @@ import kotlinx.coroutines.tasks.await
 import java.util.*
 import javax.inject.Inject
 
-// ─── Data models ──────────────────────────────────────────────────────────────
-
 data class LedgerRow(
     val id: String        = newId(),
     val desc: String      = "",
     val amount: String    = "",
     val catId: String     = "",
-    val isSynced: Boolean = false,     // id starts with "sync-" in JS source
-    val isRecorded: Boolean = false,   // _recorded flag in JS source
-    val txId: String?     = null,      // _txId field for overwrite support
+    val isSynced: Boolean = false,
+    val isRecorded: Boolean = false,
+    val txId: String?     = null,
 ) {
     companion object {
         fun newId() = "${System.currentTimeMillis()}-${(Math.random() * 1e9).toLong()}"
@@ -45,7 +38,7 @@ data class LedgerRow(
 data class LedgerCategory(
     val id: String   = "",
     val name: String = "",
-    val type: String = "",             // "Income" | "Expense"
+    val type: String = "",
     val color: String = "#6B7280",
 )
 
@@ -62,14 +55,11 @@ data class Budget(
     val amount: Double  = 0.0,
 )
 
-// LedgerData mirrors the Firestore document shape:
-// { expense: { [catId]: { [day]: LedgerRow[] } }, income: { [day]: LedgerRow[] } }
 data class LedgerData(
-    val expense: Map<String, Map<Int, List<LedgerRow>>> = emptyMap(),   // catId → day → rows
-    val income: Map<Int, List<LedgerRow>>               = emptyMap(),   // day → rows
+    val expense: Map<String, Map<Int, List<LedgerRow>>> = emptyMap(),
+    val income: Map<Int, List<LedgerRow>>               = emptyMap(),
 )
 
-// Record queue item — mirrors recordQueue Map<string, item> in page.js
 data class RecordQueueItem(
     val catId: String,
     val catName: String,
@@ -77,10 +67,8 @@ data class RecordQueueItem(
     val rowId: String,
     val desc: String,
     val amount: Double,
-    val type: String,                  // "expense" | "income"
+    val type: String,
 )
-
-// ─── UI State ─────────────────────────────────────────────────────────────────
 
 data class LedgerUiState(
     val isAuthLoading: Boolean = true,
@@ -91,11 +79,11 @@ data class LedgerUiState(
     val isRecording: Boolean = false,
     val isDirty: Boolean = false,
 
-    // Month navigation — mirrors curYear/curMonth in page.js
+    val syncStatus: String = "Connecting...",
+
     val curYear: Int = Calendar.getInstance().get(Calendar.YEAR),
     val curMonth: Int = Calendar.getInstance().get(Calendar.MONTH),
 
-    // Data
     val expenseCategories: List<LedgerCategory> = emptyList(),
     val incomeCategories: List<LedgerCategory>  = emptyList(),
     val orderedExpenseCats: List<LedgerCategory> = emptyList(),
@@ -103,35 +91,28 @@ data class LedgerUiState(
     val budgets: Map<String, Budget> = emptyMap(),
     val accounts: List<LedgerAccount> = emptyList(),
 
-    // Preferences
     val hiddenCategoryIds: Set<String> = emptySet(),
     val categoryOrder: List<String>    = emptyList(),
     val incomeCollapsed: Boolean       = false,
 
-    // Show-all-dates toggles — mirrors showAllDates state in page.js
-    val showAllDates: Map<String, Boolean> = emptyMap(),   // catId | "__income__" → bool
+    val showAllDates: Map<String, Boolean> = emptyMap(),
 
-    // UI modals
     val showBudgetModal: Boolean       = false,
     val editingBudgetCatId: String     = "",
     val budgetInput: String            = "",
     val showCatSettingsModal: Boolean  = false,
-    val showRecordModal: Boolean       = false,           // legacy bulk record modal
-    val showRowRecordModal: Boolean    = false,           // per-row record modal
-    val recordAccountId: String        = "",              // selected account for bulk record
+    val showRecordModal: Boolean       = false,
+    val showRowRecordModal: Boolean    = false,
+    val recordAccountId: String        = "",
 
-    // Record queue — mirrors recordQueue Map in page.js
-    val recordQueue: Map<String, RecordQueueItem> = emptyMap(),  // key = "catId||day||rowId"
-    val modalAccountsPerCat: Map<String, String> = emptyMap(),   // catId → accountId for row-record
+    val recordQueue: Map<String, RecordQueueItem> = emptyMap(),
+    val modalAccountsPerCat: Map<String, String> = emptyMap(),
 )
 
-// Events
 sealed class LedgerEvent {
     data class ShowToast(val message: String, val isError: Boolean = false) : LedgerEvent()
     object NavigateToDashboard : LedgerEvent()
 }
-
-// ─── ViewModel ────────────────────────────────────────────────────────────────
 
 @HiltViewModel
 class MonthlyLedgerViewModel @Inject constructor(
@@ -145,94 +126,162 @@ class MonthlyLedgerViewModel @Inject constructor(
     private val _events = MutableSharedFlow<LedgerEvent>()
     val events = _events.asSharedFlow()
 
-    // ── fmt_ym helper — mirrors fmt_ym() in page.js ──
     private fun fmtYm(year: Int, month: Int) = "%04d-%02d".format(year, month + 1)
     private val curYm get() = fmtYm(_uiState.value.curYear, _uiState.value.curMonth)
+
+    private var catListener: ListenerRegistration? = null
+    private var prefsListener: ListenerRegistration? = null
+    private var accListener: ListenerRegistration? = null
+    private var ledgerListener: ListenerRegistration? = null
+    private var budgetListener: ListenerRegistration? = null
 
     init {
         checkAdminAndLoad()
     }
 
-    // ── Admin check (Removed for general access) ────────────────────────
     private fun checkAdminAndLoad() {
         if (auth.currentUser?.uid == null) return
 
         viewModelScope.launch {
-            // Bypass the Firestore check entirely and instantly grant access
             _uiState.update { it.copy(isAdmin = true, isAuthLoading = false) }
-            loadAll()
+            startRealTimeSync()
         }
     }
 
-    // ── loadAll — mirrors loadAll() Promise.all in page.js ─────────────────
-    fun loadAll() {
+    private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, isDirty = false, recordQueue = emptyMap()) }
-            try {
-                val categories = loadCategories(uid)
-                val ledger     = loadLedger(uid)
-                val prefs      = loadPrefs(uid)
-                val accounts   = loadAccounts(uid)
-                val budgets    = loadBudgets(uid)
+        _uiState.update { it.copy(isLoading = true, isDirty = false, recordQueue = emptyMap()) }
 
-                // Build orderedExpenseCats — mirrors useEffect([expenseCategories, catOrder]) in page.js
-                val expCats    = categories.filter { it.type == "Expense" }
-                val orderedExp = buildOrderedCats(expCats, prefs.second)
+        startStaticListeners(uid)
+        startMonthSpecificListeners(uid)
+    }
 
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading          = false,
-                        expenseCategories  = expCats,
-                        incomeCategories   = categories.filter { it.type == "Income" },
-                        orderedExpenseCats = orderedExp,
-                        ledgerData         = ledger,
-                        hiddenCategoryIds  = prefs.first,
-                        categoryOrder      = prefs.second,
-                        accounts           = accounts,
-                        budgets            = budgets,
-                        recordAccountId    = accounts.firstOrNull()?.id ?: "",
-                    )
+    private fun startStaticListeners(uid: String) {
+        catListener?.remove()
+        catListener = db.collection("users").document(uid).collection("categories")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val categories = snap.documents.map { d ->
+                        LedgerCategory(
+                            id = d.id,
+                            name = d.getString("name") ?: "",
+                            type = d.getString("type") ?: "",
+                            color = d.getString("color") ?: "#6B7280"
+                        )
+                    }
+                    val expCats = categories.filter { it.type == "Expense" }
+                    val incCats = categories.filter { it.type == "Income" }
+
+                    _uiState.update { state ->
+                        state.copy(
+                            expenseCategories = expCats,
+                            incomeCategories = incCats,
+                            orderedExpenseCats = buildOrderedCats(expCats, state.categoryOrder)
+                        )
+                    }
                 }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false) }
-                emit(LedgerEvent.ShowToast("Failed to load: ${e.message}", true))
             }
-        }
+
+        prefsListener?.remove()
+        prefsListener = db.collection("users").document(uid).collection("ledgerPrefs").document("global")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null && snap.exists()) {
+                    @Suppress("UNCHECKED_CAST")
+                    val hidden = (snap.get("hiddenFromLedger") as? List<String>)?.toSet() ?: emptySet()
+                    @Suppress("UNCHECKED_CAST")
+                    val order = (snap.get("catOrder") as? List<String>) ?: emptyList()
+
+                    _uiState.update { state ->
+                        state.copy(
+                            hiddenCategoryIds = hidden,
+                            categoryOrder = order,
+                            orderedExpenseCats = buildOrderedCats(state.expenseCategories, order)
+                        )
+                    }
+                }
+            }
+
+        accListener?.remove()
+        accListener = db.collection("users").document(uid).collection("accounts")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val accounts = snap.documents.map { d ->
+                        LedgerAccount(
+                            id = d.id,
+                            name = d.getString("name") ?: "",
+                            type = d.getString("type") ?: "",
+                            balance = d.getDouble("balance") ?: 0.0
+                        )
+                    }.sortedWith(compareBy({ it.type.lowercase() != "cash" }, { it.name }))
+
+                    _uiState.update { state ->
+                        state.copy(
+                            accounts = accounts,
+                            recordAccountId = state.recordAccountId.ifBlank { accounts.firstOrNull()?.id ?: "" }
+                        )
+                    }
+                }
+            }
     }
 
-    // ── loadCategories ──────────────────────────────────────────────────────
-    private suspend fun loadCategories(uid: String): List<LedgerCategory> {
-        val snap = db.collection("users").document(uid).collection("categories")
-            .orderBy("name").get().await()
-        return snap.documents.map { d ->
-            LedgerCategory(id = d.id, name = d.getString("name") ?: "",
-                type = d.getString("type") ?: "", color = d.getString("color") ?: "#6B7280")
-        }
+    private fun startMonthSpecificListeners(uid: String) {
+        val state = _uiState.value
+        val ym = fmtYm(state.curYear, state.curMonth)
+        val year = state.curYear
+        val month = state.curMonth + 1
+
+        ledgerListener?.remove()
+        ledgerListener = db.collection("users").document(uid).collection("monthlyLedger").document(ym)
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    emit(LedgerEvent.ShowToast("Sync error: ${e.message}", true))
+                    return@addSnapshotListener
+                }
+                if (snap != null) {
+                    val status = when {
+                        snap.metadata.hasPendingWrites() -> "Syncing..."
+                        snap.metadata.isFromCache() -> "Offline (Cached)"
+                        else -> "Synced"
+                    }
+
+                    if (!_uiState.value.isDirty) {
+                        @Suppress("UNCHECKED_CAST")
+                        val raw = snap.get("data") as? Map<String, Any>
+                        val ledger = if (raw != null) parseLedgerData(raw) else LedgerData()
+                        _uiState.update { it.copy(ledgerData = ledger, isLoading = false, syncStatus = status) }
+                    } else {
+                        _uiState.update { it.copy(syncStatus = status, isLoading = false) }
+                    }
+                }
+            }
+
+        budgetListener?.remove()
+        budgetListener = db.collection("users").document(uid).collection("budgets")
+            .whereEqualTo("year", year).whereEqualTo("month", month)
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val budgets = snap.documents.associate { d ->
+                        val catId = d.getString("categoryId") ?: ""
+                        catId to Budget(id = d.id, categoryId = catId, amount = d.getDouble("amount") ?: 0.0)
+                    }
+                    _uiState.update { it.copy(budgets = budgets) }
+                }
+            }
     }
 
-    // ── loadLedger — mirrors loadLedger() in page.js ───────────────────────
-    // Reads from /users/{uid}/monthlyLedger/{yyyy-MM} — a single document
-    private suspend fun loadLedger(uid: String): LedgerData {
-        val snap = db.collection("users").document(uid)
-            .collection("monthlyLedger").document(curYm).get().await()
-        if (!snap.exists()) return LedgerData()
-
-        @Suppress("UNCHECKED_CAST")
-        val raw = snap.get("data") as? Map<String, Any> ?: return LedgerData()
-
-        // Deserialize expense: { [catId]: { [dayStr]: [ {id, desc, amount, catId, ...} ] } }
+    private fun parseLedgerData(raw: Map<String, Any>): LedgerData {
         val expense = (raw["expense"] as? Map<String, Any>)?.mapValues { (_, dayMap) ->
             (dayMap as? Map<String, Any>)?.mapNotNull { (dayStr, rows) ->
                 val day  = dayStr.toIntOrNull() ?: return@mapNotNull null
+                @Suppress("UNCHECKED_CAST")
                 val list = (rows as? List<Map<String, Any>>)?.map { r -> rowFromMap(r) } ?: return@mapNotNull null
                 day to list
             }?.toMap() ?: emptyMap()
         } ?: emptyMap()
 
-        // Deserialize income: { [dayStr]: [ rows ] }
         val income = (raw["income"] as? Map<String, Any>)?.mapNotNull { (dayStr, rows) ->
             val day  = dayStr.toIntOrNull() ?: return@mapNotNull null
+            @Suppress("UNCHECKED_CAST")
             val list = (rows as? List<Map<String, Any>>)?.map { r -> rowFromMap(r) } ?: return@mapNotNull null
             day to list
         }?.toMap() ?: emptyMap()
@@ -254,41 +303,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         )
     }
 
-    // ── loadPrefs — mirrors loadPrefs() in page.js ─────────────────────────
-    private suspend fun loadPrefs(uid: String): Pair<Set<String>, List<String>> {
-        val snap = db.collection("users").document(uid)
-            .collection("ledgerPrefs").document("global").get().await()
-        if (!snap.exists()) return Pair(emptySet(), emptyList())
-        @Suppress("UNCHECKED_CAST")
-        val hidden = (snap.get("hiddenFromLedger") as? List<String>)?.toSet() ?: emptySet()
-        @Suppress("UNCHECKED_CAST")
-        val order  = (snap.get("catOrder") as? List<String>) ?: emptyList()
-        return Pair(hidden, order)
-    }
-
-    // ── loadAccounts ────────────────────────────────────────────────────────
-    private suspend fun loadAccounts(uid: String): List<LedgerAccount> {
-        val snap = db.collection("users").document(uid).collection("accounts").get().await()
-        return snap.documents.map { d ->
-            LedgerAccount(id = d.id, name = d.getString("name") ?: "",
-                type = d.getString("type") ?: "", balance = d.getDouble("balance") ?: 0.0)
-        }.sortedWith(compareBy({ it.type.lowercase() != "cash" }, { it.name }))
-    }
-
-    // ── loadBudgets — mirrors loadBudgetsFromCollection() in page.js ───────
-    // Uses unified budgets collection (same as budgets page)
-    private suspend fun loadBudgets(uid: String): Map<String, Budget> {
-        val year  = _uiState.value.curYear
-        val month = _uiState.value.curMonth + 1
-        val snap  = db.collection("users").document(uid).collection("budgets")
-            .whereEqualTo("year", year).whereEqualTo("month", month).get().await()
-        return snap.documents.associate { d ->
-            val catId = d.getString("categoryId") ?: ""
-            catId to Budget(id = d.id, categoryId = catId, amount = d.getDouble("amount") ?: 0.0)
-        }
-    }
-
-    // ── buildOrderedCats — mirrors orderedExpenseCats useEffect in page.js ─
     private fun buildOrderedCats(expCats: List<LedgerCategory>, order: List<String>): List<LedgerCategory> {
         if (order.isEmpty()) return expCats
         val byId    = expCats.associateBy { it.id }
@@ -297,28 +311,33 @@ class MonthlyLedgerViewModel @Inject constructor(
         return ordered
     }
 
-    // ── Month navigation — mirrors goPrev/goNext in page.js ─────────────────
+    override fun onCleared() {
+        super.onCleared()
+        catListener?.remove()
+        prefsListener?.remove()
+        accListener?.remove()
+        ledgerListener?.remove()
+        budgetListener?.remove()
+    }
+
     fun goPrevMonth() {
         val cal = Calendar.getInstance().apply { set(_uiState.value.curYear, _uiState.value.curMonth, 1); add(Calendar.MONTH, -1) }
-        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH)) }
-        loadAll()
+        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH), isDirty = false, isLoading = true) }
+        startMonthSpecificListeners(auth.currentUser?.uid ?: return)
     }
 
     fun goNextMonth() {
         val cal = Calendar.getInstance().apply { set(_uiState.value.curYear, _uiState.value.curMonth, 1); add(Calendar.MONTH, 1) }
-        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH)) }
-        loadAll()
+        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH), isDirty = false, isLoading = true) }
+        startMonthSpecificListeners(auth.currentUser?.uid ?: return)
     }
 
-    // ── toggleShowAllDates — mirrors toggleShowAllDates() in page.js ────────
     fun toggleShowAllDates(key: String) {
         _uiState.update { state ->
             val prev = state.showAllDates[key] ?: false
             state.copy(showAllDates = state.showAllDates + (key to !prev))
         }
     }
-
-    // ── Row mutations — mirror updateExpenseRow / addExpenseRow / removeExpenseRow etc. ──
 
     fun updateExpenseRow(catId: String, day: Int, rowId: String, field: String, value: String) {
         _uiState.update { state ->
@@ -365,7 +384,6 @@ class MonthlyLedgerViewModel @Inject constructor(
             val dayMap = (catMap[catId] ?: emptyMap()).toMutableMap()
             dayMap[day] = (dayMap[day] ?: emptyList()).filter { it.id != rowId }
             catMap[catId] = dayMap
-            // Also remove from record queue
             val qKey = "$catId||$day||$rowId"
             state.copy(
                 ledgerData  = data.copy(expense = catMap),
@@ -423,7 +441,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── Record queue toggle — mirrors toggleRowQueue() in page.js ───────────
     fun toggleRowQueue(catId: String, catName: String, day: Int, row: LedgerRow, type: String) {
         val key = "$catId||$day||${row.id}"
         _uiState.update { state ->
@@ -434,15 +451,12 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── saveLedger — mirrors saveLedger() in page.js ────────────────────────
-    // Serializes LedgerData back to Firestore /monthlyLedger/{yyyy-MM}
     fun saveLedger() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
                 val data = _uiState.value.ledgerData
-                // Serialize to nested maps for Firestore
                 val expenseMap = data.expense.mapValues { (_, dayMap) ->
                     dayMap.mapKeys { it.key.toString() }.mapValues { (_, rows) ->
                         rows.map { rowToMap(it) }
@@ -476,8 +490,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         "_txId"     to row.txId,
     )
 
-    // ── syncFromTransactions — mirrors syncFromTransactions() in page.js ────
-    // Queries this month's transactions and merges them as "sync-" rows into LedgerData
     fun syncFromTransactions() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -505,7 +517,6 @@ class MonthlyLedgerViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Build sync maps — mirrors syncFromTransactions logic in page.js
                 val expenseMap = mutableMapOf<String, MutableMap<Int, MutableList<LedgerRow>>>()
                 val incomeMap  = mutableMapOf<Int, MutableList<LedgerRow>>()
 
@@ -528,7 +539,6 @@ class MonthlyLedgerViewModel @Inject constructor(
                     }
                 }
 
-                // Merge into existing ledger (keep manual rows, prepend sync rows) ──
                 _uiState.update { st ->
                     val curr    = st.ledgerData
                     val newExp  = curr.expense.toMutableMap()
@@ -559,8 +569,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── confirmRowRecord — mirrors confirmRowRecord() in page.js ────────────
-    // Records queued rows as Firestore transactions and adjusts account balances
     fun confirmRowRecord() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -574,7 +582,6 @@ class MonthlyLedgerViewModel @Inject constructor(
                 var created = 0
                 var updated = 0
 
-                // Group queue items by catId — mirrors byCat Map in page.js
                 val byCat = queue.values.groupBy { it.catId }
 
                 byCat.forEach { (catId, items) ->
@@ -583,11 +590,9 @@ class MonthlyLedgerViewModel @Inject constructor(
                         val dateStr = "%s-%02d".format(fmtYm(state.curYear, state.curMonth), item.day)
                         val txType  = if (item.type == "income") "Income" else "Expense"
 
-                        // Check for existing txId in ledger row (_txId field — overwrite support)
                         val existingTxId = findLedgerRowTxId(state.ledgerData, item)
 
                         if (existingTxId != null) {
-                            // Overwrite: reverse old balance, update transaction
                             val oldSnap = db.collection("users").document(uid)
                                 .collection("transactions").document(existingTxId).get().await()
                             if (oldSnap.exists()) {
@@ -608,7 +613,6 @@ class MonthlyLedgerViewModel @Inject constructor(
                                 )).await()
                             updated++
                         } else {
-                            // New transaction
                             val txRef = db.collection("users").document(uid)
                                 .collection("transactions").add(mapOf(
                                     "type"         to txType,
@@ -623,7 +627,6 @@ class MonthlyLedgerViewModel @Inject constructor(
                                     "ledgerRowId"  to item.rowId,
                                     "createdAt"    to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                                 )).await()
-                            // Store txId back into ledger row
                             storeLedgerRowTxId(item, txRef.id)
                             created++
                         }
@@ -633,14 +636,12 @@ class MonthlyLedgerViewModel @Inject constructor(
                     }
                 }
 
-                // Apply balance deltas to accounts
                 balanceDeltas.forEach { (accId, delta) ->
                     val acc = state.accounts.find { it.id == accId } ?: return@forEach
                     db.collection("users").document(uid).collection("accounts")
                         .document(accId).update("balance", acc.balance + delta).await()
                 }
 
-                // Mark rows as _recorded in ledger state
                 markRowsAsRecorded(queue)
 
                 _uiState.update { it.copy(isRecording = false, recordQueue = emptyMap(), isDirty = true) }
@@ -656,7 +657,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── findLedgerRowTxId — mirrors getLedgerRowTxId() in page.js ──────────
     private fun findLedgerRowTxId(data: LedgerData, item: RecordQueueItem): String? {
         return if (item.type == "income") {
             data.income[item.day]?.find { it.id == item.rowId }?.txId
@@ -665,7 +665,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── storeLedgerRowTxId — mirrors storeLedgerRowTxId() in page.js ───────
     private fun storeLedgerRowTxId(item: RecordQueueItem, txId: String) {
         _uiState.update { state ->
             val data = state.ledgerData
@@ -687,7 +686,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── markRowsAsRecorded — sets _recorded = true after confirmRowRecord ──
     private fun markRowsAsRecorded(queue: Map<String, RecordQueueItem>) {
         _uiState.update { state ->
             var data = state.ledgerData
@@ -712,7 +710,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── Budget actions — mirror saveBudget() in page.js ─────────────────────
     fun openBudgetModal(catId: String) {
         val current = _uiState.value.budgets[catId]?.amount ?: 0.0
         _uiState.update { it.copy(showBudgetModal = true, editingBudgetCatId = catId, budgetInput = if (current > 0) current.toString() else "") }
@@ -751,15 +748,16 @@ class MonthlyLedgerViewModel @Inject constructor(
                         .add(budgetData + ("createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())).await().id
                 }
 
-                // Carry forward to next month — mirrors saveBudget carry-forward in page.js
-                val nextMonth = if (state.curMonth + 1 == 12) 0 else state.curMonth + 1
+                val nextMonth = if (state.curMonth + 1 == 12) 1 else state.curMonth + 2
                 val nextYear  = if (state.curMonth + 1 == 12) state.curYear + 1 else state.curYear
                 val nextData  = budgetData.toMutableMap()
-                nextData["month"] = nextMonth + 1
+                nextData["month"] = nextMonth
                 nextData["year"]  = nextYear
+
                 val nextSnap  = db.collection("users").document(uid).collection("budgets")
                     .whereEqualTo("categoryId", catId).whereEqualTo("year", nextYear)
-                    .whereEqualTo("month", nextMonth + 1).get().await()
+                    .whereEqualTo("month", nextMonth).get().await()
+
                 if (!nextSnap.isEmpty) {
                     nextSnap.documents.first().reference.set(nextData, SetOptions.merge()).await()
                 } else {
@@ -780,7 +778,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── Category ordering — mirrors moveCat() in page.js ────────────────────
     fun moveCategoryUp(index: Int)   = moveCategory(index, -1)
     fun moveCategoryDown(index: Int) = moveCategory(index, 1)
 
@@ -792,13 +789,11 @@ class MonthlyLedgerViewModel @Inject constructor(
             if (swap < 0 || swap >= arr.size) return@update state
             val temp = arr[index]; arr[index] = arr[swap]; arr[swap] = temp
             val newOrder = arr.map { it.id }
-            // Save prefs async (fire-and-forget)
             viewModelScope.launch { savePrefs(uid, state.hiddenCategoryIds, newOrder) }
             state.copy(orderedExpenseCats = arr, categoryOrder = newOrder)
         }
     }
 
-    // ── Category visibility toggle — mirrors toggleCatVisibility() in page.js ─
     fun toggleCategoryVisibility(catId: String) {
         val uid = auth.currentUser?.uid ?: return
         _uiState.update { state ->
@@ -809,7 +804,6 @@ class MonthlyLedgerViewModel @Inject constructor(
         }
     }
 
-    // ── savePrefs — mirrors savePrefs() in page.js ──────────────────────────
     private suspend fun savePrefs(uid: String, hidden: Set<String>, order: List<String>) {
         db.collection("users").document(uid).collection("ledgerPrefs").document("global")
             .set(mapOf(
@@ -819,7 +813,6 @@ class MonthlyLedgerViewModel @Inject constructor(
             ), SetOptions.merge()).await()
     }
 
-    // ── Row record modal actions ─────────────────────────────────────────────
     fun openRowRecordModal() {
         val queuedCatIds = _uiState.value.recordQueue.values.map { it.catId }.distinct()
         val defaultAccId = _uiState.value.accounts.firstOrNull()?.id ?: ""
@@ -833,26 +826,12 @@ class MonthlyLedgerViewModel @Inject constructor(
         _uiState.update { it.copy(modalAccountsPerCat = it.modalAccountsPerCat + (catId to accountId)) }
     }
 
-    // ── Bulk record modal actions ────────────────────────────────────────────
     fun openRecordModal() = _uiState.update { it.copy(showRecordModal = true) }
     fun closeRecordModal() = _uiState.update { it.copy(showRecordModal = false) }
     fun setRecordAccountId(id: String) = _uiState.update { it.copy(recordAccountId = id) }
 
-    // ── Cat settings modal ────────────────────────────────────────────────────
     fun showCatSettings() = _uiState.update { it.copy(showCatSettingsModal = true) }
     fun hideCatSettings() = _uiState.update { it.copy(showCatSettingsModal = false) }
-
-    // ── Computed helpers (used by screen) ────────────────────────────────────
-
-    fun expenseCatTotal(catId: String): Double {
-        val catData = _uiState.value.ledgerData.expense[catId] ?: return 0.0
-        return catData.values.sumOf { rows -> rows.sumOf { it.amountDouble } }
-    }
-
-    fun incomeCatTotal(catId: String): Double {
-        val incData = _uiState.value.ledgerData.income
-        return incData.values.flatten().filter { it.catId == catId }.sumOf { it.amountDouble }
-    }
 
     fun getDaysInMonth(): Int {
         val state = _uiState.value

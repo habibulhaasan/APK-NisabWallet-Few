@@ -43,7 +43,6 @@ fun TransactionsScreen(
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    // Remember the formatter to avoid recreating it on every recomposition
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
 
     val pullRefreshState = rememberPullRefreshState(
@@ -65,15 +64,15 @@ fun TransactionsScreen(
                         || state.filterStartDate.isNotBlank(),
             )
 
+            MonthlySummaryRow(
+                income  = state.summaryIncome,
+                expense = state.summaryExpense,
+                fmt     = fmt,
+            )
+
             SearchBar(
                 query    = state.searchQuery,
                 onChange = { viewModel.setSearchQuery(it) },
-            )
-
-            MonthlySummaryRow(
-                income  = state.thisMonthIncome,
-                expense = state.thisMonthExpense,
-                fmt     = fmt,
             )
 
             TypeFilterTabs(
@@ -124,6 +123,7 @@ fun TransactionsScreen(
     if (state.showAddEditSheet) {
         AddEditTransactionSheet(
             editing    = state.editingTransaction,
+            defaultType = state.defaultAddType,
             accounts   = state.accounts,
             categories = state.categories,
             isSaving   = state.isSaving,
@@ -182,63 +182,72 @@ private fun TopActionBar(
     onFilter: () -> Unit,
     hasActiveFilter: Boolean,
 ) {
-    Row(
-        modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-    ) {
-        Text(
-            text       = "Transactions",
-            fontSize   = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            color      = MaterialTheme.colorScheme.onBackground,
-            modifier   = Modifier.weight(1f),
-        )
-
-        // + Income
-        FilledTonalButton(
-            onClick = onAddIncome,
-            colors  = ButtonDefaults.filledTonalButtonColors(
-                containerColor = Color(0xFFF0FDF4),
-                contentColor   = Color(0xFF16A34A),
-            ),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-        }
-
-        // + Expense
-        FilledTonalButton(
-            onClick = onAddExpense,
-            colors  = ButtonDefaults.filledTonalButtonColors(
-                containerColor = Color(0xFFFFF1F2),
-                contentColor   = Color(0xFFDC2626),
-            ),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-        }
-
-        // + Transfer
-        FilledTonalButton(
-            onClick = onAddTransfer,
-            colors  = ButtonDefaults.filledTonalButtonColors(
-                containerColor = Color(0xFFEFF6FF),
-                contentColor   = Color(0xFF2563EB),
-            ),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-        }
-
-        // Filter
-        BadgedBox(
-            badge = {
-                if (hasActiveFilter) Badge(containerColor = MaterialTheme.colorScheme.primary)
+            Text(
+                text = "Transactions",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            BadgedBox(
+                badge = {
+                    if (hasActiveFilter) Badge(containerColor = MaterialTheme.colorScheme.primary)
+                }
+            ) {
+                IconButton(onClick = onFilter) {
+                    Icon(Icons.Default.FilterList, contentDescription = "Filter")
+                }
             }
+        }
+        
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = onFilter) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filter")
+            FilledTonalButton(
+                onClick = onAddIncome,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color(0xFFF0FDF4), contentColor = Color(0xFF16A34A)
+                ),
+                contentPadding = PaddingValues(vertical = 10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Income", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            FilledTonalButton(
+                onClick = onAddExpense,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color(0xFFFFF1F2), contentColor = Color(0xFFDC2626)
+                ),
+                contentPadding = PaddingValues(vertical = 10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Expense", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            FilledTonalButton(
+                onClick = onAddTransfer,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF2563EB)
+                ),
+                contentPadding = PaddingValues(vertical = 10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Transfer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -367,15 +376,15 @@ private fun TransactionList(
     onTap: (Transaction) -> Unit,
     fmt: (Double) -> String,
 ) {
-    val grouped = remember(transactions) {
-        transactions.groupBy { it.date }.entries.sortedByDescending { it.key }
+    val grouped = remember(transactions) { 
+        transactions.groupBy { it.date }.entries.sortedByDescending { it.key } 
     }
-
+    
     val displayDates = remember(grouped) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val display = SimpleDateFormat("dd MMM yyyy", Locale.US)
-        grouped.associate {
-            it.key to runCatching { display.format(sdf.parse(it.key)!!) }.getOrDefault(it.key)
+        grouped.associate { 
+            it.key to runCatching { display.format(sdf.parse(it.key)!!) }.getOrDefault(it.key) 
         }
     }
 
@@ -510,7 +519,7 @@ private fun TransactionDetailSheet(
 ) {
     val accentColor = if (transaction.isTransfer) Color(0xFF2563EB) else if (transaction.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
     val sign        = if (transaction.isTransfer) "" else if (transaction.type == "Income") "+" else "−"
-
+    
     val dateLabel = remember(transaction.date) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val display = SimpleDateFormat("d MMMM yyyy", Locale.US)
@@ -549,7 +558,7 @@ private fun TransactionDetailSheet(
 
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 DetailRow("Type",     if (transaction.isTransfer) "Transfer" else transaction.type)
-
+                
                 if (transaction.isTransfer) {
                     if (transaction.type == "Income") {
                         DetailRow("To Account", getAccountName(transaction.accountId))
@@ -565,7 +574,7 @@ private fun TransactionDetailSheet(
                     DetailRow("Category", getCategoryName(transaction.categoryId))
                     DetailRow("Account",  getAccountName(transaction.accountId))
                 }
-
+                
                 DetailRow("Date",     dateLabel)
                 if (transaction.chargeAmount > 0) DetailRow("Charges", "${fmt(transaction.chargeAmount)}${if (transaction.chargeNote.isNotBlank()) " (${transaction.chargeNote})" else ""}", Color(0xFFF97316))
                 if (transaction.isRiba)     DetailRow("⚠ Riba Flag", "This is interest income", Color(0xFFD97706))
@@ -623,6 +632,7 @@ private fun DetailRow(label: String, value: String, valueColor: Color = Color.Un
 @Composable
 private fun AddEditTransactionSheet(
     editing: Transaction?,
+    defaultType: String,
     accounts: List<AccountItem>,
     categories: List<CategoryItem>,
     isSaving: Boolean,
@@ -630,7 +640,7 @@ private fun AddEditTransactionSheet(
     onAddCategory: (name: String, type: String, color: String, onAdded: (CategoryItem) -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var form by remember(editing) {
+    var form by remember(editing, defaultType) {
         mutableStateOf(
             if (editing != null) {
                 if (editing.isTransfer) {
@@ -642,7 +652,7 @@ private fun AddEditTransactionSheet(
                         toAccountId = if (isFrom) editing.relatedAccountId ?: "" else editing.accountId,
                         description = editing.originalDescription ?: "",
                         date = editing.date,
-                        chargeAmount = "",
+                        chargeAmount = "", 
                         chargeNote = "",
                     )
                 } else {
@@ -657,7 +667,7 @@ private fun AddEditTransactionSheet(
                         chargeNote  = editing.chargeNote,
                     )
                 }
-            } else TransactionForm()
+            } else TransactionForm(type = defaultType)
         )
     }
 
@@ -698,15 +708,15 @@ private fun AddEditTransactionSheet(
                 ) {
                     listOf("Income", "Expense", "Transfer").forEach { type ->
                         val sel = form.type == type
-                        val bg  = when {
+                        val bg  = when { 
                             sel && type == "Income" -> Color(0xFF16A34A)
                             sel && type == "Transfer" -> Color(0xFF2563EB)
                             sel -> Color(0xFFDC2626)
-                            else -> Color.Transparent
+                            else -> Color.Transparent 
                         }
                         Box(
-                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable {
-                                form = form.copy(type = type, categoryId = "")
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable { 
+                                form = form.copy(type = type, categoryId = "") 
                             }.padding(vertical = 12.dp),
                             contentAlignment  = Alignment.Center,
                         ) {
@@ -733,7 +743,7 @@ private fun AddEditTransactionSheet(
                     options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
                     onSelect= { form = form.copy(accountId = it) },
                 )
-
+                
                 LabeledDropdown(
                     label   = "To Account",
                     value   = accounts.find { it.id == form.toAccountId }?.name ?: "Select Destination Account",
@@ -865,11 +875,11 @@ private fun DateSelectionField(
     modifier: Modifier = Modifier
 ) {
     var showPicker by remember { mutableStateOf(false) }
-
+    
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = runCatching {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
+                timeZone = TimeZone.getTimeZone("UTC") 
             }
             sdf.parse(dateString)?.time
         }.getOrNull()
@@ -896,8 +906,8 @@ private fun DateSelectionField(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                            timeZone = TimeZone.getTimeZone("UTC")
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
+                            timeZone = TimeZone.getTimeZone("UTC") 
                         }
                         onDateSelected(sdf.format(Date(millis)))
                     }
@@ -1095,12 +1105,12 @@ private fun LabeledDropdown(
             onValueChange = {},
             readOnly      = true,
             label         = { Text(label) },
-            modifier      = Modifier.fillMaxWidth(),
+            modifier      = Modifier.fillMaxWidth(), 
             shape         = RoundedCornerShape(10.dp),
             trailingIcon  = { Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
         )
         Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
-
+        
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (id, name) ->
                 DropdownMenuItem(text = { Text(name, fontSize = 14.sp) }, onClick = { onSelect(id); expanded = false })

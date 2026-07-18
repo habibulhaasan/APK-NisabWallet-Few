@@ -1,18 +1,11 @@
 package com.hasan.nisabwallet.ui.screens.admin.grocery
 
-// Converted from: src/app/dashboard/admin/monthly-grocery-2/page.js
-// Source dependencies: firestoreCollections.js (addTransaction, getAccounts),
-//                      adminUtils.js (checkIsAdmin)
-// Collections used:
-//   users/{uid}/groceryItems         — master item catalogue
-//   users/{uid}/groceryMonths/{ym}   — per-month data (items[], recordedItemIds[])
-//   users/{uid}/accounts             — for recording to transaction
-//   users/{uid}/categories           — for expense category selection
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,167 +16,119 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
 import javax.inject.Inject
 
-// ─── Data models ──────────────────────────────────────────────────────────────
-
-// Master grocery item (groceryItems collection) — mirrors item fields in page.js
 data class GroceryItem(
-    val id: String             = "",
-    val name: String           = "",
-    val unit: String           = "pcs",          // pcs | kg | g | liter | ml | pack | dozen | bag | bottle | box | can | bunch
-    val defaultQty: Double     = 1.0,
+    val id: String = "",
+    val name: String = "",
+    val unit: String = "pcs",
+    val defaultQty: Double = 1.0,
     val defaultUnitPrice: Double = 0.0,
-    val category: String       = "",
-    val archived: Boolean      = false,
-)
-
-// Row built from GroceryItem + this month's data — mirrors `built` in page.js buildRows()
-data class GroceryRow(
-    val itemId: String          = "",
-    val name: String            = "",
-    val unit: String            = "pcs",
-    val category: String        = "",
-    val archived: Boolean       = false,
-
-    // Current month values
-    val curQty: Double          = 1.0,
-    val curUnitPrice: Double    = 0.0,
-    val curBought: Boolean      = false,
-    val curBoughtPrice: Double? = null,          // actual price paid (may differ from unit × qty)
-    val curRecorded: Boolean    = false,         // in recordedItemIds[]
-    val groupPriceTotal: Double? = null,
-    val groupPriceShare: Double? = null,
-    val isGroupItem: Boolean    = false,
-
-    // Previous month values (for reference)
-    val prevQty: Double?        = null,
-    val prevUnitPrice: Double?  = null,
-    val prevBought: Boolean     = false,
-) {
-    val effectivePrice: Double get() = curBoughtPrice ?: (curQty * curUnitPrice)
-}
-
-// Month data document — mirrors monthData[curYM] in page.js
-data class GroceryMonthData(
-    val id: String                  = "",
-    val items: List<GroceryMonthItem> = emptyList(),
-    val recordedItemIds: List<String> = emptyList(),
+    val category: String = "",
+    val archived: Boolean = false
 )
 
 data class GroceryMonthItem(
-    val itemId: String        = "",
-    val qty: Double           = 1.0,
-    val unitPrice: Double     = 0.0,
-    val bought: Boolean       = false,
-    val boughtPrice: Double?  = null,
+    val itemId: String = "",
+    val qty: Double = 0.0,
+    val unitPrice: Double = 0.0,
+    val bought: Boolean = false,
+    val boughtPrice: Double? = null,
     val groupPriceTotal: Double? = null,
     val groupPriceShare: Double? = null,
-    val isGroupItem: Boolean  = false,
+    val isGroupItem: Boolean = false
 )
 
-// Form for adding / editing a single grocery item
-data class GroceryItemForm(
-    val name: String           = "",
-    val unit: String           = "pcs",
-    val defaultQty: String     = "1",
-    val defaultUnitPrice: String = "0",
-    val category: String       = "",
+data class GroceryMonthData(
+    val id: String = "",
+    val month: String = "",
+    val items: List<GroceryMonthItem> = emptyList(),
+    val confirmedAt: Any? = null,
+    val transactionIds: List<String> = emptyList(),
+    val transactionId: String = "",
+    val totalAmount: Double = 0.0,
+    val accountId: String = "",
+    val categoryId: String = "",
+    val note: String = "",
+    val recordedItemIds: List<String> = emptyList()
 )
 
-// Bulk row for the bulk-add form
-data class BulkRow(
-    val id: String             = UUID.randomUUID().toString(),
-    val name: String           = "",
-    val unit: String           = "pcs",
-    val defaultQty: String     = "1",
-    val defaultUnitPrice: String = "0",
-    val category: String       = "",
-)
+data class GroceryRow(
+    val itemId: String,
+    val name: String,
+    val unit: String,
+    val category: String,
+    val archived: Boolean,
+    val curQty: Double,
+    val curUnitPrice: Double,
+    val curBought: Boolean,
+    val curBoughtPrice: Double?,
+    val curRecorded: Boolean,
+    val groupPriceTotal: Double?,
+    val groupPriceShare: Double?,
+    val isGroupItem: Boolean,
+    val prevQty: Double?,
+    val prevUnitPrice: Double?,
+    val prevBought: Boolean
+) {
+    val effectivePrice: Double
+        get() = if (isGroupItem) groupPriceTotal ?: 0.0 else curBoughtPrice ?: (curQty * curUnitPrice)
+}
 
-// Confirm modal for recording to transactions
-data class ConfirmRecordState(
-    val categoryId: String  = "",
-    val accountId: String   = "",
-    val note: String        = "",
-    val date: String        = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
-)
-
-// Group price modal
-data class GroupPriceModalState(
-    val show: Boolean               = false,
-    val catId: String               = "",
-    val selectedItemIds: List<String> = emptyList(),
-    val groupTotal: String          = "",
-    val perItemPrices: Map<String, String> = emptyMap(),
-)
-
-// ─── UI State ─────────────────────────────────────────────────────────────────
+data class GroceryAccount(val id: String = "", val name: String = "", val balance: Double = 0.0)
+data class GroceryCategoryItem(val id: String = "", val name: String = "")
+data class BulkRow(val id: String, val name: String = "", val unit: String = "pcs", val defaultQty: String = "1", val defaultUnitPrice: String = "", val category: String = "")
+data class GroceryItemForm(val name: String = "", val unit: String = "pcs", val defaultQty: String = "1", val defaultUnitPrice: String = "", val category: String = "")
+data class ConfirmRecordState(val accountId: String = "", val categoryId: String = "", val note: String = "", val date: String = "")
+data class GroupPriceModalState(val show: Boolean = false, val catId: String = "", val selectedItemIds: List<String> = emptyList(), val groupTotal: String = "", val perItemPrices: Map<String, String> = emptyMap())
 
 data class GroceryUiState(
-    val isAuthLoading: Boolean    = true,
-    val isAdmin: Boolean          = false,
-    val isLoading: Boolean        = true,
-    val isSaving: Boolean         = false,
-    val isManualSaving: Boolean   = false,
+    val isAuthLoading: Boolean = true,
+    val isAdmin: Boolean = false,
+    val isLoading: Boolean = true,
+    val isSaving: Boolean = false,
+    val isReversing: Boolean = false,
+    
+    val syncStatus: String = "Connecting...",
 
-    // Month navigation
-    val curYear: Int  = Calendar.getInstance().get(Calendar.YEAR),
+    val activeTab: String = "planner",
+    val curYear: Int = Calendar.getInstance().get(Calendar.YEAR),
     val curMonth: Int = Calendar.getInstance().get(Calendar.MONTH),
 
-    // Data
-    val items: List<GroceryItem>       = emptyList(),       // master catalogue
+    val items: List<GroceryItem> = emptyList(),
     val monthData: Map<String, GroceryMonthData> = emptyMap(),
     val accounts: List<GroceryAccount> = emptyList(),
     val expenseCategories: List<GroceryCategoryItem> = emptyList(),
-    val rows: List<GroceryRow>         = emptyList(),       // built rows for current month
 
-    // Dirty tracking — set of itemIds that changed since last save
-    val dirtyItemIds: Set<String>      = emptySet(),
+    val rows: List<GroceryRow> = emptyList(),
+    val dirtyItemIds: Set<String> = emptySet(),
 
-    // Tabs — "planner" | "history"
-    val activeTab: String = "planner",
+    val searchQuery: String = "",
+    val filterBought: String = "all",
+    val filterCategory: String = "all",
+    val showArchived: Boolean = false,
+    val showRecorded: Boolean = false,
 
-    // Filters
-    val searchQuery: String      = "",
-    val filterBought: String     = "all",              // "all" | "bought" | "not_bought"
-    val filterCategory: String   = "all",
-    val showArchived: Boolean    = false,
-    val showRecorded: Boolean    = false,
+    val showAddItemModal: Boolean = false,
+    val addModalTab: String = "single",
+    val addItemForm: GroceryItemForm = GroceryItemForm(),
+    val bulkRows: List<BulkRow> = emptyList(),
+    val editingItemId: String? = null,
 
-    // Modals
-    val showConfirmModal: Boolean      = false,
+    val showConfirmModal: Boolean = false,
     val confirmState: ConfirmRecordState = ConfirmRecordState(),
-    val showAddItemModal: Boolean      = false,
-    val editingItemId: String?         = null,
-    val addItemForm: GroceryItemForm   = GroceryItemForm(),
-    val addModalTab: String            = "single",     // "single" | "bulk" | "csv"
-    val bulkRows: List<BulkRow>        = List(5) { BulkRow() },
 
-    // Group price modal
     val groupModal: GroupPriceModalState = GroupPriceModalState(),
 
-    // Bulk assign
-    val bulkAssignItemIds: List<String> = emptyList(),
-
-    // Reverse modal
-    val showReverseModal: Boolean     = false,
-    val reverseTargetId: String?      = null,
-    val isReversing: Boolean          = false,
+    val showReverseModal: Boolean = false,
+    val reverseTargetYm: String = ""
 )
 
-// Events
 sealed class GroceryEvent {
     data class ShowToast(val message: String, val isError: Boolean = false) : GroceryEvent()
     object NavigateToDashboard : GroceryEvent()
 }
-
-data class GroceryAccount(val id: String, val name: String, val balance: Double)
-data class GroceryCategoryItem(val id: String, val name: String)
-
-// ─── ViewModel ────────────────────────────────────────────────────────────────
 
 @HiltViewModel
 class MonthlyGroceryViewModel @Inject constructor(
@@ -197,558 +142,608 @@ class MonthlyGroceryViewModel @Inject constructor(
     private val _events = MutableSharedFlow<GroceryEvent>()
     val events = _events.asSharedFlow()
 
-    // fmt_ym helper — mirrors fmt_ym() in page.js
-    private fun fmtYm(year: Int, month: Int) = "%04d-%02d".format(year, month + 1)
-    private val curYm get() = fmtYm(_uiState.value.curYear, _uiState.value.curMonth)
-    private val prevYm get() = fmtYm(_uiState.value.curYear, _uiState.value.curMonth).let { ym ->
-        val cal = Calendar.getInstance()
-        val y   = ym.split("-")[0].toInt()
-        val m   = ym.split("-")[1].toInt() - 1
-        cal.set(y, m - 1, 1)
-        "%04d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+    private var itemsListener: ListenerRegistration? = null
+    private var monthsListener: ListenerRegistration? = null
+    private var accListener: ListenerRegistration? = null
+    private var catListener: ListenerRegistration? = null
+
+    init {
+        checkAdminAndLoad()
     }
 
-    init { checkAdminAndLoad() }
-
-    // ── Admin check (Removed for general access) ────────────────────────
     private fun checkAdminAndLoad() {
         if (auth.currentUser?.uid == null) return
-
         viewModelScope.launch {
-            // Bypass the Firestore check entirely and instantly grant access
-            _uiState.update { state -> state.copy(isAdmin = true, isAuthLoading = false) }
-            loadAll()
+            _uiState.update { it.copy(isAdmin = true, isAuthLoading = false) }
+            startRealTimeSync()
         }
     }
 
-    // ── loadAll — mirrors loadAll() in page.js ─────────────────────────────
-    fun loadAll() {
+    private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            _uiState.update { state -> state.copy(isLoading = true) }
-            try {
-                val items      = loadItems(uid)
-                val monthData  = loadMonthData(uid)
-                val accounts   = loadAccounts(uid)
-                val categories = loadCategories(uid)
-                val rows       = buildRows(items, monthData)
+        _uiState.update { it.copy(isLoading = true, dirtyItemIds = emptySet()) }
 
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading         = false,
-                        items             = items,
-                        monthData         = monthData,
-                        accounts          = accounts,
-                        expenseCategories = categories,
-                        rows              = rows,
-                        dirtyItemIds      = emptySet(),
-                        confirmState      = ConfirmRecordState(
-                            accountId = accounts.firstOrNull()?.id ?: "",
-                            categoryId = categories.firstOrNull()?.id ?: "",
-                        ),
-                    )
+        accListener?.remove()
+        accListener = db.collection("users").document(uid).collection("accounts")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val accounts = snap.documents.mapNotNull { d ->
+                        val bal = d.getDouble("balance") ?: 0.0
+                        if (bal > 0) GroceryAccount(d.id, d.getString("name") ?: "", bal) else null
+                    }.sortedBy { it.name }
+                    _uiState.update { state -> 
+                        state.copy(
+                            accounts = accounts, 
+                            confirmState = state.confirmState.copy(accountId = state.confirmState.accountId.ifBlank { accounts.firstOrNull()?.id ?: "" })
+                        ) 
+                    }
                 }
-            } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isLoading = false) }
-                emit(GroceryEvent.ShowToast("Failed to load: ${e.message}", true))
             }
-        }
-    }
 
-    // ── loadItems — mirrors loadItems() in page.js ─────────────────────────
-    // Collection: users/{uid}/groceryItems ordered by name
-    private suspend fun loadItems(uid: String): List<GroceryItem> {
-        val snap = db.collection("users").document(uid)
-            .collection("groceryItems").orderBy("name").get().await()
-        return snap.documents.map { d ->
-            GroceryItem(
-                id              = d.id,
-                name            = d.getString("name") ?: "",
-                unit            = d.getString("unit") ?: "pcs",
-                defaultQty      = d.getDouble("defaultQty") ?: 1.0,
-                defaultUnitPrice= d.getDouble("defaultUnitPrice") ?: 0.0,
-                category        = d.getString("category") ?: "",
-                archived        = d.getBoolean("archived") ?: false,
-            )
-        }
-    }
-
-    // ── loadMonthData — mirrors loadMonthData() in page.js ─────────────────
-    // Collection: users/{uid}/groceryMonths — all months (keyed by ym)
-    private suspend fun loadMonthData(uid: String): Map<String, GroceryMonthData> {
-        val snap = db.collection("users").document(uid)
-            .collection("groceryMonths").get().await()
-        return snap.documents.associate { d ->
-            @Suppress("UNCHECKED_CAST")
-            val rawItems     = d.get("items") as? List<Map<String, Any>> ?: emptyList()
-            @Suppress("UNCHECKED_CAST")
-            val recordedIds  = d.get("recordedItemIds") as? List<String> ?: emptyList()
-            val monthItems   = rawItems.map { m ->
-                GroceryMonthItem(
-                    itemId         = m["itemId"] as? String ?: "",
-                    qty            = (m["qty"] as? Number)?.toDouble() ?: 1.0,
-                    unitPrice      = (m["unitPrice"] as? Number)?.toDouble() ?: 0.0,
-                    bought         = m["bought"] as? Boolean ?: false,
-                    boughtPrice    = (m["boughtPrice"] as? Number)?.toDouble(),
-                    groupPriceTotal= (m["groupPriceTotal"] as? Number)?.toDouble(),
-                    groupPriceShare= (m["groupPriceShare"] as? Number)?.toDouble(),
-                    isGroupItem    = m["isGroupItem"] as? Boolean ?: false,
-                )
+        catListener?.remove()
+        catListener = db.collection("users").document(uid).collection("categories")
+            .whereEqualTo("type", "Expense")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val cats = snap.documents.map { d ->
+                        GroceryCategoryItem(d.id, d.getString("name") ?: "")
+                    }.sortedBy { it.name }
+                    _uiState.update { it.copy(expenseCategories = cats) }
+                }
             }
-            d.id to GroceryMonthData(id = d.id, items = monthItems, recordedItemIds = recordedIds)
-        }
+
+        itemsListener?.remove()
+        itemsListener = db.collection("users").document(uid).collection("groceryItems")
+            .addSnapshotListener { snap, e ->
+                if (e != null) return@addSnapshotListener
+                if (snap != null) {
+                    val items = snap.documents.map { d ->
+                        GroceryItem(
+                            id = d.id,
+                            name = d.getString("name") ?: "",
+                            unit = d.getString("unit") ?: "pcs",
+                            defaultQty = d.getDouble("defaultQty") ?: 1.0,
+                            defaultUnitPrice = d.getDouble("defaultUnitPrice") ?: 0.0,
+                            category = d.getString("category") ?: "",
+                            archived = d.getBoolean("archived") ?: false
+                        )
+                    }.sortedBy { it.name }
+                    _uiState.update { it.copy(items = items) }
+                    rebuildRowsIfClean()
+                }
+            }
+
+        monthsListener?.remove()
+        monthsListener = db.collection("users").document(uid).collection("groceryMonths")
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    emit(GroceryEvent.ShowToast("Sync error: ${e.message}", true))
+                    return@addSnapshotListener
+                }
+                if (snap != null) {
+                    val status = when {
+                        snap.metadata.hasPendingWrites() -> "Syncing..."
+                        snap.metadata.isFromCache() -> "Offline (Cached)"
+                        else -> "Synced"
+                    }
+
+                    val mData = snap.documents.associate { d ->
+                        val rawItems = d.get("items") as? List<Map<String, Any>> ?: emptyList()
+                        val parsedItems = rawItems.map { r ->
+                            GroceryMonthItem(
+                                itemId = r["itemId"] as? String ?: "",
+                                qty = (r["qty"] as? Number)?.toDouble() ?: 0.0,
+                                unitPrice = (r["unitPrice"] as? Number)?.toDouble() ?: 0.0,
+                                bought = r["bought"] as? Boolean ?: false,
+                                boughtPrice = (r["boughtPrice"] as? Number)?.toDouble(),
+                                groupPriceTotal = (r["groupPriceTotal"] as? Number)?.toDouble(),
+                                groupPriceShare = (r["groupPriceShare"] as? Number)?.toDouble(),
+                                isGroupItem = r["isGroupItem"] as? Boolean ?: false
+                            )
+                        }
+                        @Suppress("UNCHECKED_CAST")
+                        d.id to GroceryMonthData(
+                            id = d.id,
+                            month = d.getString("month") ?: d.id,
+                            items = parsedItems,
+                            confirmedAt = d.get("confirmedAt"),
+                            transactionIds = d.get("transactionIds") as? List<String> ?: emptyList(),
+                            transactionId = d.getString("transactionId") ?: "",
+                            totalAmount = d.getDouble("totalAmount") ?: 0.0,
+                            accountId = d.getString("accountId") ?: "",
+                            categoryId = d.getString("categoryId") ?: "",
+                            note = d.getString("note") ?: "",
+                            recordedItemIds = d.get("recordedItemIds") as? List<String> ?: emptyList()
+                        )
+                    }
+
+                    _uiState.update { it.copy(monthData = mData, syncStatus = status) }
+                    rebuildRowsIfClean()
+                }
+            }
     }
 
-    // ── loadAccounts — only accounts with balance > 0 (mirrors loadAccounts in page.js) ──
-    private suspend fun loadAccounts(uid: String): List<GroceryAccount> {
-        val snap = db.collection("users").document(uid).collection("accounts").get().await()
-        return snap.documents.mapNotNull { d ->
-            val bal = d.getDouble("balance") ?: 0.0
-            if (bal <= 0) null
-            else GroceryAccount(id = d.id, name = d.getString("name") ?: "", balance = bal)
-        }
-    }
+    private fun rebuildRowsIfClean() {
+        val state = _uiState.value
+        if (state.dirtyItemIds.isNotEmpty()) return 
 
-    // ── loadCategories — Expense categories only ──────────────────────────
-    private suspend fun loadCategories(uid: String): List<GroceryCategoryItem> {
-        val snap = db.collection("users").document(uid).collection("categories")
-            .whereEqualTo("type", "Expense").orderBy("name").get().await()
-        return snap.documents.map { d -> GroceryCategoryItem(id = d.id, name = d.getString("name") ?: "") }
-    }
+        val curYm = fmtYm(state.curYear, state.curMonth)
+        val prevYm = getPrevYm(state.curYear, state.curMonth)
 
-    // ── buildRows — mirrors the `built` array construction in page.js ───────
-    // Merges master items + current month data + previous month data into GroceryRow list
-    private fun buildRows(items: List<GroceryItem>, monthData: Map<String, GroceryMonthData>): List<GroceryRow> {
-        val curMonthItems  = monthData[curYm]?.items  ?: emptyList()
-        val prevMonthItems = monthData[prevYm]?.items ?: emptyList()
-        val recordedIds    = monthData[curYm]?.recordedItemIds ?: emptyList()
+        val curMonthItems = state.monthData[curYm]?.items ?: emptyList()
+        val prevMonthItems = state.monthData[prevYm]?.items ?: emptyList()
+        val recordedIds = state.monthData[curYm]?.recordedItemIds ?: emptyList()
 
-        return items.map { item ->
-            val cur  = curMonthItems.find { it.itemId == item.id }
+        val built = state.items.map { item ->
+            val cur = curMonthItems.find { it.itemId == item.id }
             val prev = prevMonthItems.find { it.itemId == item.id }
             GroceryRow(
-                itemId          = item.id,
-                name            = item.name,
-                unit            = item.unit,
-                category        = item.category,
-                archived        = item.archived,
-                curQty          = cur?.qty          ?: item.defaultQty,
-                curUnitPrice    = cur?.unitPrice    ?: item.defaultUnitPrice,
-                curBought       = cur?.bought       ?: false,
-                curBoughtPrice  = cur?.boughtPrice,
-                curRecorded     = recordedIds.contains(item.id),
+                itemId = item.id,
+                name = item.name,
+                unit = item.unit,
+                category = item.category,
+                archived = item.archived,
+                curQty = cur?.qty ?: item.defaultQty,
+                curUnitPrice = cur?.unitPrice ?: item.defaultUnitPrice,
+                curBought = cur?.bought ?: false,
+                curBoughtPrice = cur?.boughtPrice,
+                curRecorded = recordedIds.contains(item.id),
                 groupPriceTotal = cur?.groupPriceTotal,
                 groupPriceShare = cur?.groupPriceShare,
-                isGroupItem     = cur?.isGroupItem  ?: false,
-                prevQty         = prev?.qty,
-                prevUnitPrice   = prev?.unitPrice,
-                prevBought      = prev?.bought      ?: false,
+                isGroupItem = cur?.isGroupItem ?: false,
+                prevQty = prev?.qty,
+                prevUnitPrice = prev?.unitPrice,
+                prevBought = prev?.bought ?: false
             )
         }
+
+        _uiState.update { it.copy(rows = built, isLoading = false) }
     }
 
-    // ── Month navigation ───────────────────────────────────────────────────
+    override fun onCleared() {
+        super.onCleared()
+        itemsListener?.remove()
+        monthsListener?.remove()
+        accListener?.remove()
+        catListener?.remove()
+    }
+
+    private fun fmtYm(year: Int, month: Int) = "%04d-%02d".format(year, month + 1)
+    private fun getPrevYm(year: Int, month: Int): String {
+        val cal = Calendar.getInstance().apply { set(year, month, 1); add(Calendar.MONTH, -1) }
+        return fmtYm(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH))
+    }
+
     fun goPrevMonth() {
-        val cal = Calendar.getInstance()
-        cal.set(_uiState.value.curYear, _uiState.value.curMonth, 1)
-        cal.add(Calendar.MONTH, -1)
-        _uiState.update { state -> state.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH)) }
-        loadAll()
+        val cal = Calendar.getInstance().apply { set(_uiState.value.curYear, _uiState.value.curMonth, 1); add(Calendar.MONTH, -1) }
+        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH), dirtyItemIds = emptySet(), isLoading = true) }
+        rebuildRowsIfClean()
     }
 
     fun goNextMonth() {
-        val cal = Calendar.getInstance()
-        cal.set(_uiState.value.curYear, _uiState.value.curMonth, 1)
-        cal.add(Calendar.MONTH, 1)
-        _uiState.update { state -> state.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH)) }
-        loadAll()
+        val cal = Calendar.getInstance().apply { set(_uiState.value.curYear, _uiState.value.curMonth, 1); add(Calendar.MONTH, 1) }
+        _uiState.update { it.copy(curYear = cal.get(Calendar.YEAR), curMonth = cal.get(Calendar.MONTH), dirtyItemIds = emptySet(), isLoading = true) }
+        rebuildRowsIfClean()
     }
 
-    // ── Row mutations — update qty, price, bought status in local state ─────
-
-    fun updateRowQty(itemId: String, qty: String) = updateRowField(itemId) { row -> row.copy(curQty = qty.toDoubleOrNull() ?: row.curQty) }
-    fun updateRowUnitPrice(itemId: String, price: String) = updateRowField(itemId) { row -> row.copy(curUnitPrice = price.toDoubleOrNull() ?: row.curUnitPrice) }
-    fun updateRowBoughtPrice(itemId: String, price: String) = updateRowField(itemId) { row -> row.copy(curBoughtPrice = price.toDoubleOrNull()) }
-
-    // Toggle bought status — mirrors the bought checkbox in page.js
-    fun toggleBought(itemId: String) {
-        updateRowField(itemId) { row -> row.copy(curBought = !row.curBought) }
-    }
-
-    private fun updateRowField(itemId: String, transform: (GroceryRow) -> GroceryRow) {
+    private fun updateRow(itemId: String, transform: (GroceryRow) -> GroceryRow) {
         _uiState.update { state ->
-            val rows = state.rows.map { row -> if (row.itemId == itemId) transform(row) else row }
-            state.copy(rows = rows, dirtyItemIds = state.dirtyItemIds + itemId)
+            val nextRows = state.rows.map { if (it.itemId == itemId) transform(it) else it }
+            state.copy(rows = nextRows, dirtyItemIds = state.dirtyItemIds + itemId)
         }
     }
 
-    // ── saveMonth — mirrors the auto-save logic in page.js ─────────────────
-    // Serializes all dirty rows back to groceryMonths/{ym}
+    fun updateRowQty(itemId: String, value: String) {
+        val v = value.toDoubleOrNull() ?: 0.0
+        updateRow(itemId) { it.copy(curQty = v) }
+    }
+
+    fun updateRowUnitPrice(itemId: String, value: String) {
+        val v = value.toDoubleOrNull() ?: 0.0
+        updateRow(itemId) { it.copy(curUnitPrice = v) }
+    }
+
+    fun updateRowBoughtPrice(itemId: String, value: String) {
+        val v = value.toDoubleOrNull()
+        updateRow(itemId) { it.copy(curBoughtPrice = v) }
+    }
+
+    fun toggleBought(itemId: String) {
+        _uiState.update { state ->
+            val nextRows = state.rows.map { r ->
+                if (r.itemId == itemId) {
+                    val willBuy = !r.curBought
+                    val defaultPrice = r.groupPriceShare ?: (r.curQty * r.curUnitPrice)
+                    r.copy(
+                        curBought = willBuy,
+                        curBoughtPrice = if (willBuy) (r.curBoughtPrice ?: (if (defaultPrice > 0) defaultPrice else null)) else null
+                    )
+                } else r
+            }
+            state.copy(rows = nextRows, dirtyItemIds = state.dirtyItemIds + itemId)
+        }
+    }
+
     fun saveMonth() {
-        val uid   = auth.currentUser?.uid ?: return
+        val uid = auth.currentUser?.uid ?: return
         val state = _uiState.value
         if (state.dirtyItemIds.isEmpty()) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                // Serialize rows → GroceryMonthItem list
-                val itemsData = state.rows.map { row ->
-                    mapOf(
-                        "itemId"          to row.itemId,
-                        "qty"             to row.curQty,
-                        "unitPrice"       to row.curUnitPrice,
-                        "bought"          to row.curBought,
-                        "boughtPrice"     to row.curBoughtPrice,
-                        "groupPriceTotal" to row.groupPriceTotal,
-                        "groupPriceShare" to row.groupPriceShare,
-                        "isGroupItem"     to row.isGroupItem,
+                val curYm = fmtYm(state.curYear, state.curMonth)
+                val existingItems = state.monthData[curYm]?.items?.associateBy { it.itemId }?.toMutableMap() ?: mutableMapOf()
+                
+                state.dirtyItemIds.forEach { id ->
+                    val row = state.rows.find { it.itemId == id } ?: return@forEach
+                    existingItems[id] = GroceryMonthItem(
+                        itemId = row.itemId,
+                        qty = row.curQty,
+                        unitPrice = row.curUnitPrice,
+                        bought = row.curBought,
+                        boughtPrice = row.curBoughtPrice,
+                        groupPriceTotal = row.groupPriceTotal,
+                        groupPriceShare = row.groupPriceShare,
+                        isGroupItem = row.isGroupItem
                     )
                 }
 
-                db.collection("users").document(uid)
-                    .collection("groceryMonths").document(curYm)
-                    .set(
-                        mapOf(
-                            "items"     to itemsData,
-                            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                        ),
-                        SetOptions.merge(),
-                    ).await()
+                db.collection("users").document(uid).collection("groceryMonths").document(curYm)
+                    .set(mapOf(
+                        "month" to curYm,
+                        "items" to existingItems.values.toList(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    ), SetOptions.merge()).await()
 
                 _uiState.update { it.copy(isSaving = false, dirtyItemIds = emptySet()) }
+                emit(GroceryEvent.ShowToast("Saved successfully"))
             } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false) }
                 emit(GroceryEvent.ShowToast("Save failed: ${e.message}", true))
             }
         }
     }
 
-    // ── confirmRecord — mirrors handleConfirmRecord() in page.js ────────────
-    // Creates an Expense transaction for all bought + unrecorded items
-    // Marks them as recorded in recordedItemIds[]
+    fun openConfirmModal() {
+        _uiState.update { it.copy(showConfirmModal = true, confirmState = ConfirmRecordState(
+            date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
+            accountId = it.accounts.firstOrNull()?.id ?: ""
+        )) }
+    }
+    fun closeConfirmModal() = _uiState.update { it.copy(showConfirmModal = false) }
+    fun updateConfirmState(state: ConfirmRecordState) = _uiState.update { it.copy(confirmState = state) }
+
     fun confirmRecord() {
-        val uid     = auth.currentUser?.uid ?: return
-        val state   = _uiState.value
-        val confirm = state.confirmState
-
-        if (confirm.accountId.isBlank() || confirm.categoryId.isBlank()) {
-            viewModelScope.launch { emit(GroceryEvent.ShowToast("Select account and category", true)) }
-            return
-        }
-
+        val uid = auth.currentUser?.uid ?: return
+        val state = _uiState.value
+        
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, showConfirmModal = false) }
+            _uiState.update { it.copy(isSaving = true) }
             try {
-                val boughtUnrecorded = state.rows.filter { it.curBought && !it.curRecorded && !it.archived }
-                if (boughtUnrecorded.isEmpty()) {
-                    emit(GroceryEvent.ShowToast("No new bought items to record"))
-                    _uiState.update { state -> state.copy(isSaving = false) }
-                    return@launch
+                if (state.dirtyItemIds.isNotEmpty()) saveMonth()
+
+                val toRecord = state.rows.filter { it.curBought && !it.curRecorded && !it.archived }
+                if (toRecord.isEmpty()) throw Exception("No items to record")
+
+                val cState = state.confirmState
+                val acc = state.accounts.find { it.id == cState.accountId } ?: throw Exception("Invalid account")
+
+                val groupRows = toRecord.filter { it.isGroupItem }
+                val indivRows = toRecord.filter { !it.isGroupItem }
+
+                val txIds = mutableListOf<String>()
+                var grandTotal = 0.0
+                val notePrefix = if (cState.note.isNotBlank()) "${cState.note} — " else ""
+
+                val groupBuckets = groupRows.groupBy { "${it.category}::${it.groupPriceTotal}" }
+                for ((_, bRows) in groupBuckets) {
+                    val first = bRows.first()
+                    val catId = if (first.category.isBlank()) cState.categoryId else first.category
+                    val catName = state.expenseCategories.find { it.id == catId }?.name ?: "Uncategorized"
+                    val total = first.groupPriceTotal ?: 0.0
+
+                    val itemsDesc = bRows.joinToString(", ") { "${it.name} ×${it.curQty}" }
+                    val desc = "${notePrefix}Groceries [${catName} - Group]: $itemsDesc"
+
+                    val txRef = db.collection("users").document(uid).collection("transactions").add(mapOf(
+                        "type" to "Expense", "amount" to total, "accountId" to cState.accountId,
+                        "categoryId" to catId, "description" to desc, "date" to cState.date,
+                        "isGrocery" to true, "groceryMonth" to fmtYm(state.curYear, state.curMonth),
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )).await()
+                    
+                    txIds.add(txRef.id)
+                    grandTotal += total
                 }
 
-                val total = boughtUnrecorded.sumOf { it.effectivePrice }
+                val indivBuckets = indivRows.groupBy { it.category }
+                for ((origCatId, cRows) in indivBuckets) {
+                    val catId = if (origCatId.isBlank()) cState.categoryId else origCatId
+                    val catName = state.expenseCategories.find { it.id == catId }?.name ?: "Uncategorized"
+                    val total = cRows.sumOf { it.curBoughtPrice ?: (it.curQty * it.curUnitPrice) }
 
-                // Create one consolidated Expense transaction — mirrors page.js behavior
-                db.collection("users").document(uid).collection("transactions").add(
-                    mapOf(
-                        "type"        to "Expense",
-                        "amount"      to total,
-                        "accountId"   to confirm.accountId,
-                        "categoryId"  to confirm.categoryId,
-                        "description" to confirm.note.ifBlank { "Monthly Grocery — ${monthLabel()}" },
-                        "date"        to confirm.date,
-                        "source"      to "monthly_grocery",
-                        "createdAt"   to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )
-                ).await()
+                    val itemsDesc = cRows.joinToString(", ") { "${it.name} ×${it.curQty}" }
+                    val desc = "${notePrefix}Groceries [${catName}]: $itemsDesc"
 
-                // Deduct from account balance
-                val acc = state.accounts.find { it.id == confirm.accountId }
-                if (acc != null) {
-                    db.collection("users").document(uid).collection("accounts")
-                        .document(confirm.accountId)
-                        .update("balance", acc.balance - total).await()
+                    val txRef = db.collection("users").document(uid).collection("transactions").add(mapOf(
+                        "type" to "Expense", "amount" to total, "accountId" to cState.accountId,
+                        "categoryId" to catId, "description" to desc, "date" to cState.date,
+                        "isGrocery" to true, "groceryMonth" to fmtYm(state.curYear, state.curMonth),
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )).await()
+
+                    txIds.add(txRef.id)
+                    grandTotal += total
                 }
 
-                // Mark items as recorded in groceryMonths/{ym}
-                val newRecordedIds = (state.monthData[curYm]?.recordedItemIds ?: emptyList()) + boughtUnrecorded.map { it.itemId }
+                db.collection("users").document(uid).collection("accounts").document(acc.id)
+                    .update("balance", acc.balance - grandTotal).await()
+
+                val curYm = fmtYm(state.curYear, state.curMonth)
+                val prevRecorded = state.monthData[curYm]?.recordedItemIds ?: emptyList()
+                val prevTxIds = state.monthData[curYm]?.transactionIds ?: emptyList()
+                val newRecorded = (prevRecorded + toRecord.map { it.itemId }).distinct()
+
                 db.collection("users").document(uid).collection("groceryMonths").document(curYm)
-                    .update("recordedItemIds", newRecordedIds).await()
+                    .set(mapOf(
+                        "confirmedAt" to FieldValue.serverTimestamp(),
+                        "transactionIds" to (prevTxIds + txIds),
+                        "transactionId" to (txIds.firstOrNull() ?: ""),
+                        "totalAmount" to (state.monthData[curYm]?.totalAmount ?: 0.0) + grandTotal,
+                        "accountId" to cState.accountId,
+                        "categoryId" to cState.categoryId,
+                        "recordedItemIds" to newRecorded
+                    ), SetOptions.merge()).await()
 
-                emit(GroceryEvent.ShowToast("Recorded ${boughtUnrecorded.size} items — ৳${"%.2f".format(total)}"))
-                loadAll()
+                _uiState.update { it.copy(showConfirmModal = false, isSaving = false) }
+                emit(GroceryEvent.ShowToast("Recorded $grandTotal successfully!"))
             } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isSaving = false) }
-                emit(GroceryEvent.ShowToast("Record failed: ${e.message}", true))
+                _uiState.update { it.copy(isSaving = false) }
+                emit(GroceryEvent.ShowToast("Recording failed: ${e.message}", true))
             }
         }
     }
 
-    // ── reverseRecord — mirrors handleReverse() in page.js ──────────────────
-    // Removes an item from recordedItemIds[]
+    fun openReverseModal(ym: String) = _uiState.update { it.copy(showReverseModal = true, reverseTargetYm = ym) }
+    fun closeReverseModal() = _uiState.update { it.copy(showReverseModal = false) }
+
     fun reverseRecord() {
-        val uid      = auth.currentUser?.uid ?: return
-        val targetId = _uiState.value.reverseTargetId ?: return
+        val uid = auth.currentUser?.uid ?: return
+        val state = _uiState.value
+        val ym = state.reverseTargetYm
+        val data = state.monthData[ym] ?: return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isReversing = true, showReverseModal = false) }
+            _uiState.update { it.copy(isReversing = true) }
             try {
-                val curRecorded = _uiState.value.monthData[curYm]?.recordedItemIds ?: emptyList()
-                db.collection("users").document(uid).collection("groceryMonths").document(curYm)
-                    .update("recordedItemIds", curRecorded - targetId).await()
-                emit(GroceryEvent.ShowToast("Recording reversed"))
-                loadAll()
+                val txIds = data.transactionIds.ifEmpty { if (data.transactionId.isNotBlank()) listOf(data.transactionId) else emptyList() }
+                
+                for (txId in txIds) {
+                    try { db.collection("users").document(uid).collection("transactions").document(txId).delete().await() } catch (_: Exception) {}
+                }
+
+                if (data.accountId.isNotBlank() && data.totalAmount > 0) {
+                    val accSnap = db.collection("users").document(uid).collection("accounts").document(data.accountId).get().await()
+                    if (accSnap.exists()) {
+                        val oldBal = accSnap.getDouble("balance") ?: 0.0
+                        db.collection("users").document(uid).collection("accounts").document(data.accountId)
+                            .update("balance", oldBal + data.totalAmount).await()
+                    }
+                }
+
+                db.collection("users").document(uid).collection("groceryMonths").document(ym)
+                    .set(mapOf(
+                        "confirmedAt" to null,
+                        "transactionIds" to emptyList<String>(),
+                        "transactionId" to "",
+                        "totalAmount" to 0.0,
+                        "recordedItemIds" to emptyList<String>()
+                    ), SetOptions.merge()).await()
+
+                _uiState.update { it.copy(isReversing = false, showReverseModal = false) }
+                emit(GroceryEvent.ShowToast("Recording reversed successfully"))
             } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isReversing = false) }
+                _uiState.update { it.copy(isReversing = false) }
                 emit(GroceryEvent.ShowToast("Reverse failed: ${e.message}", true))
             }
         }
     }
 
-    // ── addItem (single) — mirrors handleAddItem() in page.js ───────────────
-    fun addItem() {
-        val uid  = auth.currentUser?.uid ?: return
-        val form = _uiState.value.addItemForm
-        if (form.name.isBlank()) {
-            viewModelScope.launch { emit(GroceryEvent.ShowToast("Enter item name", true)) }
-            return
+    fun openGroupModal(catId: String) {
+        val items = _uiState.value.rows.filter { (it.category.ifBlank { "__none__" } == catId) && !it.curRecorded }
+        _uiState.update { it.copy(
+            groupModal = GroupPriceModalState(
+                show = true, catId = catId,
+                selectedItemIds = items.map { r -> r.itemId },
+                groupTotal = "",
+                perItemPrices = items.associate { r -> r.itemId to (r.curBoughtPrice?.toString() ?: "") }
+            )
+        )}
+    }
+
+    fun closeGroupModal() = _uiState.update { it.copy(groupModal = GroupPriceModalState()) }
+
+    fun setGroupTotal(amount: String) = _uiState.update { it.copy(groupModal = it.groupModal.copy(groupTotal = amount)) }
+    
+    fun setPerItemPrice(id: String, price: String) = _uiState.update { 
+        it.copy(groupModal = it.groupModal.copy(perItemPrices = it.groupModal.perItemPrices + (id to price))) 
+    }
+
+    fun confirmGroupPrice() {
+        val state = _uiState.value
+        val total = state.groupModal.groupTotal.toDoubleOrNull() ?: return
+        val selected = state.groupModal.selectedItemIds
+
+        _uiState.update { st ->
+            val nextRows = st.rows.map { r ->
+                if (r.itemId in selected) {
+                    val refPrice = st.groupModal.perItemPrices[r.itemId]?.toDoubleOrNull()
+                    r.copy(
+                        curBought = true,
+                        curBoughtPrice = refPrice,
+                        groupPriceTotal = total,
+                        groupPriceShare = refPrice,
+                        isGroupItem = true
+                    )
+                } else r
+            }
+            st.copy(
+                rows = nextRows,
+                dirtyItemIds = st.dirtyItemIds + selected,
+                groupModal = GroupPriceModalState()
+            )
         }
+    }
+
+    fun openAddItemModal() = _uiState.update { it.copy(showAddItemModal = true, addModalTab = "single", editingItemId = null, addItemForm = GroceryItemForm(), bulkRows = List(5) { BulkRow(id = java.util.UUID.randomUUID().toString()) }) }
+    fun closeAddItemModal() = _uiState.update { it.copy(showAddItemModal = false, editingItemId = null) }
+    fun setAddModalTab(tab: String) = _uiState.update { it.copy(addModalTab = tab) }
+
+    fun openEditItemModal(item: GroceryItem) = _uiState.update { 
+        it.copy(
+            showAddItemModal = true, editingItemId = item.id,
+            addItemForm = GroceryItemForm(item.name, item.unit, item.defaultQty.toString(), if (item.defaultUnitPrice > 0) item.defaultUnitPrice.toString() else "", item.category)
+        ) 
+    }
+
+    fun updateAddItemForm(form: GroceryItemForm) = _uiState.update { it.copy(addItemForm = form) }
+
+    fun addItem() {
+        val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                db.collection("users").document(uid).collection("groceryItems").add(
-                    mapOf(
-                        "name"             to form.name.trim(),
-                        "unit"             to form.unit,
-                        "defaultQty"       to (form.defaultQty.toDoubleOrNull() ?: 1.0),
-                        "defaultUnitPrice" to (form.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
-                        "category"         to form.category.trim(),
-                        "archived"         to false,
-                        "createdAt"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )
-                ).await()
-                emit(GroceryEvent.ShowToast("\"${form.name.trim()}\" added!"))
-                closeAddItemModal()
-                loadAll()
+                val f = _uiState.value.addItemForm
+                db.collection("users").document(uid).collection("groceryItems").add(mapOf(
+                    "name" to f.name.trim(), "unit" to f.unit,
+                    "defaultQty" to (f.defaultQty.toDoubleOrNull() ?: 1.0),
+                    "defaultUnitPrice" to (f.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
+                    "category" to f.category, "createdAt" to FieldValue.serverTimestamp()
+                )).await()
+                _uiState.update { it.copy(isSaving = false, showAddItemModal = false) }
+                emit(GroceryEvent.ShowToast("Item added successfully"))
             } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false) }
                 emit(GroceryEvent.ShowToast("Failed to add: ${e.message}", true))
             }
         }
     }
 
-    // ── addItemsBulk — mirrors handleBulkSave() in page.js ──────────────────
-    fun addItemsBulk() {
-        val uid   = auth.currentUser?.uid ?: return
-        val valid = _uiState.value.bulkRows.filter { it.name.isNotBlank() }
-        if (valid.isEmpty()) {
-            viewModelScope.launch { emit(GroceryEvent.ShowToast("Enter at least one item name", true)) }
-            return
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
-            try {
-                val batch = db.batch()
-                valid.forEach { row ->
-                    val ref = db.collection("users").document(uid).collection("groceryItems").document()
-                    batch.set(ref, mapOf(
-                        "name"             to row.name.trim(),
-                        "unit"             to row.unit,
-                        "defaultQty"       to (row.defaultQty.toDoubleOrNull() ?: 1.0),
-                        "defaultUnitPrice" to (row.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
-                        "category"         to row.category.trim(),
-                        "archived"         to false,
-                        "createdAt"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    ))
-                }
-                batch.commit().await()
-                emit(GroceryEvent.ShowToast("${valid.size} items added!"))
-                closeAddItemModal()
-                loadAll()
-            } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isSaving = false) }
-                emit(GroceryEvent.ShowToast("Bulk add failed: ${e.message}", true))
-            }
-        }
-    }
-
-    // ── editItem — mirrors handleEditItem() in page.js ───────────────────────
     fun editItem() {
-        val uid     = auth.currentUser?.uid ?: return
-        val editId  = _uiState.value.editingItemId ?: return
-        val form    = _uiState.value.addItemForm
-        if (form.name.isBlank()) return
-
+        val uid = auth.currentUser?.uid ?: return
+        val itemId = _uiState.value.editingItemId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                db.collection("users").document(uid).collection("groceryItems").document(editId)
-                    .update(mapOf(
-                        "name"             to form.name.trim(),
-                        "unit"             to form.unit,
-                        "defaultQty"       to (form.defaultQty.toDoubleOrNull() ?: 1.0),
-                        "defaultUnitPrice" to (form.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
-                        "category"         to form.category.trim(),
-                        "updatedAt"        to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    )).await()
+                val f = _uiState.value.addItemForm
+                db.collection("users").document(uid).collection("groceryItems").document(itemId).update(mapOf(
+                    "name" to f.name.trim(), "unit" to f.unit,
+                    "defaultQty" to (f.defaultQty.toDoubleOrNull() ?: 1.0),
+                    "defaultUnitPrice" to (f.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
+                    "category" to f.category
+                )).await()
+                _uiState.update { it.copy(isSaving = false, showAddItemModal = false, editingItemId = null) }
                 emit(GroceryEvent.ShowToast("Item updated"))
-                closeAddItemModal()
-                loadAll()
             } catch (e: Exception) {
-                _uiState.update { state -> state.copy(isSaving = false) }
-                emit(GroceryEvent.ShowToast("Update failed: ${e.message}", true))
+                _uiState.update { it.copy(isSaving = false) }
+                emit(GroceryEvent.ShowToast("Failed to update: ${e.message}", true))
             }
         }
     }
 
-    // ── archiveItem — mirrors handleArchiveItem() in page.js ─────────────────
     fun archiveItem(itemId: String) {
         val uid = auth.currentUser?.uid ?: return
+        val current = _uiState.value.items.find { it.id == itemId }?.archived ?: false
         viewModelScope.launch {
             try {
-                db.collection("users").document(uid).collection("groceryItems").document(itemId)
-                    .update("archived", true).await()
-                emit(GroceryEvent.ShowToast("Item archived"))
-                loadAll()
-            } catch (e: Exception) {
-                emit(GroceryEvent.ShowToast("Archive failed: ${e.message}", true))
-            }
+                db.collection("users").document(uid).collection("groceryItems").document(itemId).update("archived", !current).await()
+                emit(GroceryEvent.ShowToast(if (current) "Item restored" else "Item archived"))
+            } catch (e: Exception) { emit(GroceryEvent.ShowToast("Action failed: ${e.message}", true)) }
         }
     }
 
-    // ── deleteItem — mirrors handleDeleteItem() in page.js ───────────────────
     fun deleteItem(itemId: String) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
                 db.collection("users").document(uid).collection("groceryItems").document(itemId).delete().await()
                 emit(GroceryEvent.ShowToast("Item deleted"))
-                loadAll()
+            } catch (e: Exception) { emit(GroceryEvent.ShowToast("Delete failed: ${e.message}", true)) }
+        }
+    }
+
+    fun updateBulkRow(index: Int, row: BulkRow) = _uiState.update { 
+        val list = it.bulkRows.toMutableList()
+        list[index] = row
+        it.copy(bulkRows = list) 
+    }
+    
+    fun addBulkRow() = _uiState.update { it.copy(bulkRows = it.bulkRows + BulkRow(id = java.util.UUID.randomUUID().toString())) }
+
+    fun addItemsBulk() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            try {
+                val validRows = _uiState.value.bulkRows.filter { it.name.isNotBlank() }
+                validRows.forEach { r ->
+                    db.collection("users").document(uid).collection("groceryItems").add(mapOf(
+                        "name" to r.name.trim(), "unit" to r.unit,
+                        "defaultQty" to (r.defaultQty.toDoubleOrNull() ?: 1.0),
+                        "defaultUnitPrice" to (r.defaultUnitPrice.toDoubleOrNull() ?: 0.0),
+                        "category" to r.category, "createdAt" to FieldValue.serverTimestamp()
+                    )).await()
+                }
+                _uiState.update { it.copy(isSaving = false, showAddItemModal = false, bulkRows = List(5) { BulkRow(id = java.util.UUID.randomUUID().toString()) }) }
+                emit(GroceryEvent.ShowToast("${validRows.size} items added"))
             } catch (e: Exception) {
-                emit(GroceryEvent.ShowToast("Delete failed: ${e.message}", true))
+                _uiState.update { it.copy(isSaving = false) }
+                emit(GroceryEvent.ShowToast("Bulk add failed: ${e.message}", true))
             }
         }
     }
 
-    // ── Group price modal actions — mirrors groupModal state in page.js ───────
+    fun setActiveTab(tab: String) = _uiState.update { it.copy(activeTab = tab) }
+    fun setSearchQuery(q: String) = _uiState.update { it.copy(searchQuery = q) }
+    fun setFilterBought(f: String) = _uiState.update { it.copy(filterBought = f) }
+    fun setFilterCategory(c: String) = _uiState.update { it.copy(filterCategory = c) }
+    fun toggleShowRecorded() = _uiState.update { it.copy(showRecorded = !it.showRecorded) }
+    fun toggleShowArchived() = _uiState.update { it.copy(showArchived = !it.showArchived) }
 
-    fun openGroupModal(catId: String) {
-        val catItems = _uiState.value.rows.filter { it.category == catId && !it.archived }
-        _uiState.update { state -> state.copy(
-            groupModal = GroupPriceModalState(
-                show            = true,
-                catId           = catId,
-                selectedItemIds = catItems.map { it.itemId },
-                groupTotal      = "",
-                perItemPrices   = catItems.associate { it.itemId to "" },
-            )
-        )}
-    }
-
-    fun closeGroupModal() = _uiState.update { state -> state.copy(groupModal = GroupPriceModalState()) }
-
-    fun setGroupTotal(total: String) {
-        _uiState.update { state ->
-            val modal = state.groupModal
-            // Auto-distribute equally among selected items
-            val totalAmt  = total.toDoubleOrNull() ?: 0.0
-            val count     = modal.selectedItemIds.size.coerceAtLeast(1)
-            val perItem   = if (totalAmt > 0) (totalAmt / count) else 0.0
-            val perItemMap = modal.selectedItemIds.associateWith { "%.2f".format(perItem) }
-            state.copy(groupModal = modal.copy(groupTotal = total, perItemPrices = perItemMap))
+    fun boughtItems(state: GroceryUiState) = state.rows.count { it.curBought }
+    fun totalItems(state: GroceryUiState) = state.rows.size
+    fun totalEstimated(state: GroceryUiState) = state.rows.filter { !it.curBought && it.curQty > 0 && it.curUnitPrice > 0 }.sumOf { it.curQty * it.curUnitPrice }
+    
+    fun totalSpent(state: GroceryUiState): Double {
+        var sum = 0.0
+        val seen = mutableSetOf<String>()
+        state.rows.filter { it.curBought }.forEach { r ->
+            if (r.isGroupItem) {
+                val key = "${r.category}::${r.groupPriceTotal}"
+                if (!seen.contains(key)) { seen.add(key); sum += (r.groupPriceTotal ?: 0.0) }
+            } else { sum += r.curBoughtPrice ?: (r.curQty * r.curUnitPrice) }
         }
+        return sum
     }
 
-    fun setPerItemPrice(itemId: String, price: String) {
-        _uiState.update { state ->
-            val modal = state.groupModal
-            state.copy(groupModal = modal.copy(perItemPrices = modal.perItemPrices + (itemId to price)))
-        }
-    }
-
-    fun confirmGroupPrice() {
-        _uiState.update { state ->
-            val modal = state.groupModal
-            val rows  = state.rows.map { row ->
-                if (modal.selectedItemIds.contains(row.itemId)) {
-                    val share = modal.perItemPrices[row.itemId]?.toDoubleOrNull() ?: 0.0
-                    row.copy(
-                        groupPriceTotal = modal.groupTotal.toDoubleOrNull(),
-                        groupPriceShare = share,
-                        isGroupItem     = true,
-                        curBoughtPrice  = share,
-                        curBought       = true,
-                    )
-                } else row
+    fun filteredRows(state: GroceryUiState): List<GroceryRow> {
+        return state.rows.filter { r ->
+            if (!state.showArchived && r.archived) return@filter false
+            if (!state.showRecorded && r.curRecorded) return@filter false
+            
+            val matchSearch = r.name.contains(state.searchQuery, ignoreCase = true)
+            val matchBought = when (state.filterBought) {
+                "bought" -> r.curBought
+                "not_bought" -> !r.curBought
+                else -> true
             }
-            val dirty = state.dirtyItemIds + modal.selectedItemIds
-            state.copy(rows = rows, groupModal = GroupPriceModalState(), dirtyItemIds = dirty)
-        }
-        saveMonth()
-    }
-
-    // ── Filter actions ─────────────────────────────────────────────────────
-    fun setSearchQuery(q: String)    = _uiState.update { state -> state.copy(searchQuery = q) }
-    fun setFilterBought(f: String)   = _uiState.update { state -> state.copy(filterBought = f) }
-    fun setFilterCategory(c: String) = _uiState.update { state -> state.copy(filterCategory = c) }
-    fun toggleShowArchived()         = _uiState.update { state -> state.copy(showArchived = !state.showArchived) }
-    fun toggleShowRecorded()         = _uiState.update { state -> state.copy(showRecorded = !state.showRecorded) }
-    fun setActiveTab(tab: String)    = _uiState.update { state -> state.copy(activeTab = tab) }
-
-    // ── Modal helpers ──────────────────────────────────────────────────────
-    fun openAddItemModal() = _uiState.update { state -> state.copy(showAddItemModal = true, editingItemId = null, addItemForm = GroceryItemForm()) }
-    fun openEditItemModal(item: GroceryItem) = _uiState.update { state -> state.copy(
-        showAddItemModal = true,
-        editingItemId    = item.id,
-        addItemForm      = GroceryItemForm(name = item.name, unit = item.unit, defaultQty = item.defaultQty.toString(), defaultUnitPrice = item.defaultUnitPrice.toString(), category = item.category),
-    )}
-    fun closeAddItemModal() = _uiState.update { state -> state.copy(showAddItemModal = false, editingItemId = null, addItemForm = GroceryItemForm()) }
-
-    fun updateAddItemForm(form: GroceryItemForm) = _uiState.update { state -> state.copy(addItemForm = form) }
-
-    fun updateBulkRow(index: Int, row: BulkRow) {
-        _uiState.update { state ->
-            val rows = state.bulkRows.toMutableList().also { list -> list[index] = row }
-            state.copy(bulkRows = rows)
+            val matchCat = if (state.filterCategory == "all") true else r.category == state.filterCategory
+            matchSearch && matchBought && matchCat
         }
     }
 
-    fun addBulkRow() = _uiState.update { state -> state.copy(bulkRows = state.bulkRows + BulkRow()) }
-
-    fun setAddModalTab(tab: String) = _uiState.update { state -> state.copy(addModalTab = tab) }
-
-    fun openConfirmModal() = _uiState.update { state -> state.copy(showConfirmModal = true) }
-    fun closeConfirmModal() = _uiState.update { state -> state.copy(showConfirmModal = false) }
-    fun updateConfirmState(s: ConfirmRecordState) = _uiState.update { state -> state.copy(confirmState = s) }
-
-    fun openReverseModal(itemId: String) = _uiState.update { state -> state.copy(showReverseModal = true, reverseTargetId = itemId) }
-    fun closeReverseModal() = _uiState.update { state -> state.copy(showReverseModal = false, reverseTargetId = null) }
-
-    // ── Computed helpers ───────────────────────────────────────────────────
-
-    // filteredRows — mirrors the filtered display list in page.js
-    fun filteredRows(state: GroceryUiState = _uiState.value): List<GroceryRow> {
-        return state.rows.filter { row ->
-            (!row.archived || state.showArchived) &&
-                    (state.showRecorded || !row.curRecorded) &&
-                    (state.searchQuery.isBlank() || row.name.contains(state.searchQuery, ignoreCase = true)) &&
-                    (state.filterBought == "all" || (state.filterBought == "bought" && row.curBought) || (state.filterBought == "not_bought" && !row.curBought)) &&
-                    (state.filterCategory == "all" || row.category == state.filterCategory)
-        }
+    private fun emit(event: GroceryEvent) {
+        viewModelScope.launch { _events.emit(event) }
     }
-
-    // Summary totals — mirrors summary cards in page.js
-    fun totalItems(state: GroceryUiState = _uiState.value) = state.rows.count { !it.archived }
-    fun boughtItems(state: GroceryUiState = _uiState.value) = state.rows.count { it.curBought && !it.archived }
-    fun totalEstimated(state: GroceryUiState = _uiState.value) = state.rows.filter { !it.archived }.sumOf { it.curQty * it.curUnitPrice }
-    fun totalSpent(state: GroceryUiState = _uiState.value) = state.rows.filter { it.curBought && !it.archived }.sumOf { it.effectivePrice }
-
-    private fun monthLabel(): String {
-        val months = arrayOf("January","February","March","April","May","June","July","August","September","October","November","December")
-        val state  = _uiState.value
-        return "${months[state.curMonth]} ${state.curYear}"
-    }
-
-    private fun emit(event: GroceryEvent) { viewModelScope.launch { _events.emit(event) } }
 }

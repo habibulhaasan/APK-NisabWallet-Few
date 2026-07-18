@@ -1,5 +1,7 @@
 package com.hasan.nisabwallet.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
@@ -73,8 +75,7 @@ private val bottomTabs = listOf(
 /**
  * Top-level composable: decides Login/Register vs. the main app, and — only on
  * the four converted pages — shows a bottom nav bar so Monthly Ledger and Monthly
- * Grocery are actually reachable (nothing in DashboardScreen itself links to the
- * admin pages, since that UI lives in the not-yet-converted web sidebar).
+ * Grocery are actually reachable.
  */
 @Composable
 fun NisabWalletRootNav(
@@ -121,15 +122,22 @@ fun NisabWalletRootNav(
 fun NisabWalletNavGraph(
     navController: NavHostController = rememberNavController(),
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
-    // Matches every other ViewModel's pattern of talking to FirebaseAuth directly
-    // (no repository layer in this codebase) — see AuthViewModel.isSignedIn().
     startDestination: String = if (FirebaseAuth.getInstance().currentUser != null) {
         Routes.DASHBOARD
     } else {
         Routes.LOGIN
     },
 ) {
-    NavHost(navController = navController, startDestination = startDestination, modifier = modifier) {
+    // We explicitly disable entering and exiting animations to make tab switching instant
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None }
+    ) {
 
         composable(Routes.LOGIN) {
             LoginScreen(

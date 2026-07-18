@@ -3,16 +3,20 @@ package com.hasan.nisabwallet.ui.screens.admin.ledger
 // Converted from: src/app/dashboard/admin/monthly-ledger/page.js
 // Pairs with: MonthlyLedgerViewModel.kt
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -32,13 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-// ─── Palette (mirrors Tailwind classes used in page.js) ───────────────────────
+// ─── Palette ───────────────────────────────────────────────────────────────
 private val Emerald50  = Color(0xFFECFDF5)
 private val Emerald100 = Color(0xFFD1FAE5)
 private val Emerald200 = Color(0xFFA7F3D0)
@@ -157,6 +159,7 @@ fun MonthlyLedgerScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
 
     var incomeCollapsed by remember { mutableStateOf(false) }
 
@@ -186,6 +189,7 @@ fun MonthlyLedgerScreen(
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -221,17 +225,28 @@ fun MonthlyLedgerScreen(
                     }
                 }
             } else {
+                val visibleInc = visibleIncomeCats(state)
+                val visibleExp = visibleExpenseCats(state)
+
                 item {
                     SummaryCard(
                         totalIncome = totalIncome(state),
                         totalExpenses = totalExpenses(state),
-                        visibleExpenseCats = visibleExpenseCats(state),
+                        visibleExpenseCats = visibleExp,
                         catTotal = { expenseCatTotal(state, it) },
                         budgets = state.budgets,
+                        onCategoryClick = { catId ->
+                            val baseOffset = 3 + if (visibleInc.isNotEmpty()) 1 else 0
+                            val index = visibleExp.indexOfFirst { it.id == catId }
+                            if (index >= 0) {
+                                scope.launch {
+                                    listState.animateScrollToItem(baseOffset + index)
+                                }
+                            }
+                        }
                     )
                 }
 
-                val visibleInc = visibleIncomeCats(state)
                 if (visibleInc.isNotEmpty()) {
                     item {
                         IncomeBlockCard(
@@ -248,7 +263,6 @@ fun MonthlyLedgerScreen(
                     }
                 }
 
-                val visibleExp = visibleExpenseCats(state)
                 items(visibleExp, key = { it.id }) { cat ->
                     ExpenseCategoryCard(
                         state = state,
@@ -507,8 +521,11 @@ private fun SummaryCard(
     visibleExpenseCats: List<LedgerCategory>,
     catTotal: (String) -> Double,
     budgets: Map<String, Budget>,
+    onCategoryClick: (String) -> Unit
 ) {
+    var expensesExpanded by remember { mutableStateOf(false) }
     val remaining = totalIncome - totalExpenses
+    
     Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Text(
@@ -528,36 +545,63 @@ private fun SummaryCard(
                     if (remaining >= 0) Blue600 else Amber700, if (remaining >= 0) Blue50 else Amber100,
                 )
             }
+            
             if (visibleExpenseCats.isNotEmpty()) {
-                Text(
-                    "EXPENSES BY CATEGORY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500,
-                    letterSpacing = 0.5.sp,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp),
-                )
-                FlowRowSimple(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
-                    visibleExpenseCats.forEach { cat ->
-                        val total = catTotal(cat.id)
-                        val budget = budgets[cat.id]?.amount ?: 0.0
-                        val over = budget > 0 && total > budget
-                        val (bg, fg) = when {
-                            over -> Red50 to Red700
-                            total > 0 -> Gray100 to Gray700
-                            else -> Gray50 to Gray400
-                        }
-                        Surface(shape = RoundedCornerShape(50), color = bg, modifier = Modifier.padding(bottom = 8.dp, end = 8.dp)) {
-                            Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(cat.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = fg)
-                                Spacer(Modifier.width(4.dp))
-                                Text(fmtMoney(total), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg)
-                                if (budget > 0) {
-                                    Text(" / ${fmtMoney(budget)}", fontSize = 10.sp, color = if (over) Red400 else Gray400)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expensesExpanded = !expensesExpanded }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "EXPENSES BY CATEGORY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500,
+                        letterSpacing = 0.5.sp,
+                    )
+                    Icon(
+                        imageVector = if (expensesExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Toggle Expenses",
+                        tint = Gray500,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                
+                AnimatedVisibility(visible = expensesExpanded) {
+                    FlowRowSimple(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
+                        visibleExpenseCats.forEach { cat ->
+                            val total = catTotal(cat.id)
+                            val budget = budgets[cat.id]?.amount ?: 0.0
+                            val over = budget > 0 && total > budget
+                            val (bg, fg) = when {
+                                over -> Red50 to Red700
+                                total > 0 -> Gray100 to Gray700
+                                else -> Gray50 to Gray400
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50), 
+                                color = bg, 
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp, end = 8.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { onCategoryClick(cat.id) }
+                            ) {
+                                Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(cat.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = fg)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(fmtMoney(total), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg)
+                                    if (budget > 0) {
+                                        Text(" / ${fmtMoney(budget)}", fontSize = 10.sp, color = if (over) Red400 else Gray400)
+                                    }
+                                    if (over) Text(" ↑", fontSize = 10.sp, color = fg)
                                 }
-                                if (over) Text(" ↑", fontSize = 10.sp, color = fg)
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+                if (expensesExpanded) {
+                    Spacer(Modifier.height(4.dp))
+                }
             } else {
                 Spacer(Modifier.height(8.dp))
             }
@@ -806,7 +850,7 @@ private fun CompactCategoryDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val catName = categories.find { it.id == selectedId }?.name ?: "Select…"
-
+    
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -932,7 +976,7 @@ private fun ExpenseCategoryCard(
                         val rows = expenseRowsForDay(state, cat.id, day)
                         val isToday = isCurMonth && day == today
                         val daySum = rows.sumOf { it.amountDouble }
-
+                        
                         rows.forEachIndexed { ri, row ->
                             ExpenseRowEditor(
                                 day = day,
@@ -1176,7 +1220,6 @@ private fun CategorySettingsSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        // ADDED verticalScroll(rememberScrollState()) HERE
         Column(
             Modifier
                 .fillMaxWidth()

@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ListenerRegistration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,30 +19,28 @@ import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
-// ─── UI State ─────────────────────────────────────────────────────────────────
-
 data class TransactionsUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
+    val syncStatus: String = "Connecting...", 
+    
     val transactions: List<Transaction> = emptyList(),
     val filteredTransactions: List<Transaction> = emptyList(),
     val accounts: List<AccountItem> = emptyList(),
     val categories: List<CategoryItem> = emptyList(),
 
-    // Filters
-    val filterType: String = "All",          // "All" | "Income" | "Expense"
+    val filterType: String = "All",
     val filterAccountId: String = "all",
     val filterCategoryId: String = "all",
     val filterStartDate: String = "",
     val filterEndDate: String = "",
     val searchQuery: String = "",
 
-    // Monthly summary
-    val thisMonthIncome: Double = 0.0,
-    val thisMonthExpense: Double = 0.0,
+    val summaryIncome: Double = 0.0,
+    val summaryExpense: Double = 0.0,
 
-    // Sheet state
     val showAddEditSheet: Boolean = false,
+    val defaultAddType: String = "Expense",
     val editingTransaction: Transaction? = null,
     val showFilterSheet: Boolean = false,
     val showDetailPopup: Boolean = false,
@@ -51,26 +49,23 @@ data class TransactionsUiState(
     val deletingTransaction: Transaction? = null,
 )
 
-// ─── Domain models for this screen ────────────────────────────────────────────
-
 data class Transaction(
     val id: String = "",
-    val type: String = "",                 // "Income" | "Expense"
+    val type: String = "",
     val amount: Double = 0.0,
     val accountId: String = "",
     val categoryId: String = "",
     val description: String = "",
-    val date: String = "",                 // "yyyy-MM-dd"
+    val date: String = "",
     val isCharge: Boolean = false,
     val isRiba: Boolean = false,
     val chargeAmount: Double = 0.0,
     val chargeNote: String = "",
     val createdAtMillis: Long = 0L,
-
-    // Transfer specific fields
+    
     val isTransfer: Boolean = false,
     val originalId: String? = null,
-    val transferDirection: String? = null, // "from" | "to"
+    val transferDirection: String? = null,
     val relatedAccountId: String? = null,
     val relatedAccountName: String? = null,
     val originalDescription: String? = null,
@@ -86,18 +81,17 @@ data class AccountItem(
 data class CategoryItem(
     val id: String = "",
     val name: String = "",
-    val type: String = "",                 // "Income" | "Expense"
+    val type: String = "",
     val color: String = "#6B7280",
     val isSystem: Boolean = false,
     val isRiba: Boolean = false,
 )
 
-// Form state for AddEditTransactionSheet
 data class TransactionForm(
-    val type: String = "Expense", // "Income", "Expense", "Transfer"
+    val type: String = "Expense",
     val amount: String = "",
     val accountId: String = "",
-    val toAccountId: String = "", // Used only for transfers
+    val toAccountId: String = "",
     val categoryId: String = "",
     val description: String = "",
     val date: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
@@ -105,12 +99,9 @@ data class TransactionForm(
     val chargeNote: String = "",
 )
 
-// Events
 sealed class TransactionEvent {
     data class ShowToast(val message: String, val isError: Boolean = false) : TransactionEvent()
 }
-
-// ─── ViewModel ────────────────────────────────────────────────────────────────
 
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
@@ -124,233 +115,223 @@ class TransactionsViewModel @Inject constructor(
     private val _events = MutableSharedFlow<TransactionEvent>()
     val events = _events.asSharedFlow()
 
+    private var txListener: ListenerRegistration? = null
+    private var trListener: ListenerRegistration? = null
+    private var accListener: ListenerRegistration? = null
+    private var catListener: ListenerRegistration? = null
+
+    private var rawTransactions = emptyList<Transaction>()
+    private var rawTransfers = emptyList<Transaction>()
+
     init {
-        loadAll()
+        startRealTimeSync()
     }
 
-    fun refresh() = loadAll()
+    fun refresh() {
+        startRealTimeSync()
+    }
 
-    private fun loadAll() {
+    private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
-                val transactions = loadTransactionsAndTransfers(uid)
-                val accounts     = loadAccounts(uid)
-                val categories   = loadCategories(uid)
-                val monthSummary = computeMonthSummary(transactions)
+        _uiState.update { it.copy(isLoading = true) }
 
-                _uiState.update { state ->
-                    state.copy(
-                        isLoading          = false,
-                        transactions       = transactions,
-                        filteredTransactions = applyFilters(transactions, state),
-                        accounts           = accounts,
-                        categories         = categories,
-                        thisMonthIncome    = monthSummary.first,
-                        thisMonthExpense   = monthSummary.second,
-                    )
+        txListener?.remove()
+        trListener?.remove()
+        accListener?.remove()
+        catListener?.remove()
+
+        accListener = db.collection("users").document(uid).collection("accounts")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val accounts = snap.documents.map { d ->
+                        AccountItem(
+                            id = d.id,
+                            name = d.getString("name") ?: "",
+                            type = d.getString("type") ?: "",
+                            balance = d.getDouble("balance") ?: 0.0,
+                        )
+                    }
+                    _uiState.update { it.copy(accounts = accounts) }
                 }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false) }
-                emit(TransactionEvent.ShowToast("Failed to load: ${e.message}", true))
             }
-        }
+
+        catListener = db.collection("users").document(uid).collection("categories")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val categories = snap.documents.map { d ->
+                        CategoryItem(
+                            id = d.id,
+                            name = d.getString("name") ?: "",
+                            type = d.getString("type") ?: "",
+                            color = d.getString("color") ?: "#6B7280",
+                            isSystem = d.getBoolean("isSystem") ?: false,
+                            isRiba = d.getBoolean("isRiba") ?: false,
+                        )
+                    }.sortedBy { it.name }
+                    _uiState.update { it.copy(categories = categories) }
+                }
+            }
+
+        txListener = db.collection("users").document(uid).collection("transactions")
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    emit(TransactionEvent.ShowToast("Sync error: ${e.message}", true))
+                    return@addSnapshotListener
+                }
+                if (snap != null) {
+                    val status = when {
+                        snap.metadata.hasPendingWrites() -> "Syncing..."
+                        snap.metadata.isFromCache() -> "Offline (Cached)"
+                        else -> "Synced"
+                    }
+                    
+                    rawTransactions = snap.documents.map { d ->
+                        Transaction(
+                            id = d.id,
+                            type = d.getString("type") ?: "",
+                            amount = d.getDouble("amount") ?: 0.0,
+                            accountId = d.getString("accountId") ?: "",
+                            categoryId = d.getString("categoryId") ?: "",
+                            description = d.getString("description") ?: "",
+                            date = d.getString("date") ?: "",
+                            isCharge = d.getBoolean("isCharge") ?: false,
+                            isRiba = d.getBoolean("isRiba") ?: false,
+                            chargeAmount = d.getDouble("chargeAmount") ?: 0.0,
+                            chargeNote = d.getString("chargeNote") ?: "",
+                            createdAtMillis = d.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
+                        )
+                    }
+                    combineAndEmit(status)
+                }
+            }
+
+        trListener = db.collection("users").document(uid).collection("transfers")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val expandedTransfers = mutableListOf<Transaction>()
+                    snap.documents.forEach { t ->
+                        val id = t.id
+                        val amt = t.getDouble("amount") ?: 0.0
+                        val fromId = t.getString("fromAccountId") ?: ""
+                        val fromName = t.getString("fromAccountName") ?: ""
+                        val toId = t.getString("toAccountId") ?: ""
+                        val toName = t.getString("toAccountName") ?: ""
+                        val desc = t.getString("description") ?: ""
+                        val date = t.getString("date") ?: ""
+                        val ts = t.getTimestamp("createdAt")?.toDate()?.time ?: 0L
+
+                        expandedTransfers.add(
+                            Transaction(
+                                id = "$id-expense", originalId = id, isTransfer = true,
+                                type = "Expense", amount = amt, accountId = fromId,
+                                description = desc.ifBlank { "Transfer to $toName" },
+                                originalDescription = desc, date = date, createdAtMillis = ts,
+                                transferDirection = "from", relatedAccountId = toId, relatedAccountName = toName
+                            )
+                        )
+                        expandedTransfers.add(
+                            Transaction(
+                                id = "$id-income", originalId = id, isTransfer = true,
+                                type = "Income", amount = amt, accountId = toId,
+                                description = desc.ifBlank { "Transfer from $fromName" },
+                                originalDescription = desc, date = date, createdAtMillis = ts,
+                                transferDirection = "to", relatedAccountId = fromId, relatedAccountName = fromName
+                            )
+                        )
+                    }
+                    rawTransfers = expandedTransfers
+                    combineAndEmit(null)
+                }
+            }
     }
 
-    private suspend fun loadTransactionsAndTransfers(uid: String): List<Transaction> {
-        // Query transactions with fallback for caching/index errors
-        val txSnap = try {
-            db.collection("users").document(uid)
-                .collection("transactions")
-                .orderBy("date", Query.Direction.DESCENDING)
-                .get().await()
-        } catch (e: Exception) {
-            db.collection("users").document(uid)
-                .collection("transactions")
-                .get().await()
-        }
-
-        val normalTxs = txSnap.documents.map { d ->
-            Transaction(
-                id            = d.id,
-                type          = d.getString("type") ?: "",
-                amount        = d.getDouble("amount") ?: 0.0,
-                accountId     = d.getString("accountId") ?: "",
-                categoryId    = d.getString("categoryId") ?: "",
-                description   = d.getString("description") ?: "",
-                date          = d.getString("date") ?: "",
-                isCharge      = d.getBoolean("isCharge") ?: false,
-                isRiba        = d.getBoolean("isRiba") ?: false,
-                chargeAmount  = d.getDouble("chargeAmount") ?: 0.0,
-                chargeNote    = d.getString("chargeNote") ?: "",
-                createdAtMillis = d.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
-            )
-        }
-
-        // Query transfers with fallback
-        val trSnap = try {
-            db.collection("users").document(uid)
-                .collection("transfers")
-                .orderBy("date", Query.Direction.DESCENDING)
-                .get().await()
-        } catch (e: Exception) {
-            db.collection("users").document(uid)
-                .collection("transfers")
-                .get().await()
-        }
-
-        val expandedTransfers = mutableListOf<Transaction>()
-
-        trSnap.documents.forEach { t ->
-            val id = t.id
-            val amt = t.getDouble("amount") ?: 0.0
-            val fromId = t.getString("fromAccountId") ?: ""
-            val fromName = t.getString("fromAccountName") ?: ""
-            val toId = t.getString("toAccountId") ?: ""
-            val toName = t.getString("toAccountName") ?: ""
-            val desc = t.getString("description") ?: ""
-            val date = t.getString("date") ?: ""
-            val ts = t.getTimestamp("createdAt")?.toDate()?.time ?: 0L
-
-            // Expand into Expense (From)
-            expandedTransfers.add(
-                Transaction(
-                    id = "$id-expense", originalId = id, isTransfer = true,
-                    type = "Expense", amount = amt, accountId = fromId,
-                    description = desc.ifBlank { "Transfer to $toName" },
-                    originalDescription = desc,
-                    date = date, createdAtMillis = ts,
-                    transferDirection = "from", relatedAccountId = toId, relatedAccountName = toName
-                )
-            )
-            // Expand into Income (To)
-            expandedTransfers.add(
-                Transaction(
-                    id = "$id-income", originalId = id, isTransfer = true,
-                    type = "Income", amount = amt, accountId = toId,
-                    description = desc.ifBlank { "Transfer from $fromName" },
-                    originalDescription = desc,
-                    date = date, createdAtMillis = ts,
-                    transferDirection = "to", relatedAccountId = fromId, relatedAccountName = fromName
-                )
-            )
-        }
-
-        // Combine and resolve the secondary sorting locally
-        return (normalTxs + expandedTransfers).sortedWith(
+    private fun combineAndEmit(newSyncStatus: String?) {
+        val combined = (rawTransactions + rawTransfers).sortedWith(
             compareByDescending<Transaction> { it.date }.thenByDescending { it.createdAtMillis }
         )
-    }
 
-    private suspend fun loadAccounts(uid: String): List<AccountItem> {
-        val snap = db.collection("users").document(uid).collection("accounts").get().await()
-        return snap.documents.map { d ->
-            AccountItem(
-                id      = d.id,
-                name    = d.getString("name") ?: "",
-                type    = d.getString("type") ?: "",
-                balance = d.getDouble("balance") ?: 0.0,
-            )
-        }
-    }
-
-    private suspend fun loadCategories(uid: String): List<CategoryItem> {
-        val snap = db.collection("users").document(uid).collection("categories").get().await()
-        return snap.documents.map { d ->
-            CategoryItem(
-                id       = d.id,
-                name     = d.getString("name") ?: "",
-                type     = d.getString("type") ?: "",
-                color    = d.getString("color") ?: "#6B7280",
-                isSystem = d.getBoolean("isSystem") ?: false,
-                isRiba   = d.getBoolean("isRiba") ?: false,
-            )
-        }.sortedBy { it.name }
-    }
-
-    private fun computeMonthSummary(transactions: List<Transaction>): Pair<Double, Double> {
-        val cal   = Calendar.getInstance()
-        val year  = cal.get(Calendar.YEAR)
-        val month = cal.get(Calendar.MONTH) + 1
-        val start = "%04d-%02d-01".format(year, month)
-        val end   = "%04d-%02d-%02d".format(year, month,
-            cal.apply { set(year, month - 1, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH))
-
-        var income  = 0.0
-        var expense = 0.0
-        transactions.forEach { tx ->
-            // Skip transfers in the summary
-            if (!tx.isTransfer && tx.date in start..end) {
-                if (tx.type == "Income")  income  += tx.amount
-                if (tx.type == "Expense") expense += tx.amount
+        _uiState.update { state ->
+            val filtered = applyFilters(combined, state)
+            
+            var inc = 0.0
+            var exp = 0.0
+            filtered.forEach { tx ->
+                if (!tx.isTransfer) {
+                    if (tx.type == "Income") inc += tx.amount
+                    if (tx.type == "Expense") exp += tx.amount
+                }
             }
-        }
-        return Pair(income, expense)
-    }
 
-    fun setSearchQuery(query: String) {
-        _uiState.update { state ->
-            val filtered = applyFilters(state.transactions, state.copy(searchQuery = query))
-            state.copy(searchQuery = query, filteredTransactions = filtered)
-        }
-    }
-
-    fun setFilterType(type: String) {
-        _uiState.update { state ->
-            val filtered = applyFilters(state.transactions, state.copy(filterType = type))
-            state.copy(filterType = type, filteredTransactions = filtered)
-        }
-    }
-
-    fun setFilterAccount(accountId: String) {
-        _uiState.update { state ->
-            val filtered = applyFilters(state.transactions, state.copy(filterAccountId = accountId))
-            state.copy(filterAccountId = accountId, filteredTransactions = filtered)
-        }
-    }
-
-    fun setFilterCategory(categoryId: String) {
-        _uiState.update { state ->
-            val filtered = applyFilters(state.transactions, state.copy(filterCategoryId = categoryId))
-            state.copy(filterCategoryId = categoryId, filteredTransactions = filtered)
-        }
-    }
-
-    fun setFilterDateRange(start: String, end: String) {
-        _uiState.update { state ->
-            val filtered = applyFilters(state.transactions, state.copy(filterStartDate = start, filterEndDate = end))
-            state.copy(filterStartDate = start, filterEndDate = end, filteredTransactions = filtered)
-        }
-    }
-
-    fun clearFilters() {
-        _uiState.update { state ->
             state.copy(
-                filterType       = "All",
-                filterAccountId  = "all",
-                filterCategoryId = "all",
-                filterStartDate  = "",
-                filterEndDate    = "",
-                searchQuery      = "",
-                filteredTransactions = state.transactions,
+                isLoading = false,
+                transactions = combined,
+                filteredTransactions = filtered,
+                summaryIncome = inc,
+                summaryExpense = exp,
+                syncStatus = newSyncStatus ?: state.syncStatus
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        txListener?.remove()
+        trListener?.remove()
+        accListener?.remove()
+        catListener?.remove()
+    }
+
+    private fun updateFilters(updateBlock: (TransactionsUiState) -> TransactionsUiState) {
+        _uiState.update { currentState ->
+            val nextState = updateBlock(currentState)
+            val filtered = applyFilters(nextState.transactions, nextState)
+            
+            var inc = 0.0
+            var exp = 0.0
+            filtered.forEach { tx ->
+                if (!tx.isTransfer) {
+                    if (tx.type == "Income") inc += tx.amount
+                    if (tx.type == "Expense") exp += tx.amount
+                }
+            }
+
+            nextState.copy(
+                filteredTransactions = filtered,
+                summaryIncome = inc,
+                summaryExpense = exp
+            )
+        }
+    }
+
+    fun setSearchQuery(query: String) = updateFilters { it.copy(searchQuery = query) }
+    fun setFilterType(type: String) = updateFilters { it.copy(filterType = type) }
+    fun setFilterAccount(accountId: String) = updateFilters { it.copy(filterAccountId = accountId) }
+    fun setFilterCategory(categoryId: String) = updateFilters { it.copy(filterCategoryId = categoryId) }
+    fun setFilterDateRange(start: String, end: String) = updateFilters { it.copy(filterStartDate = start, filterEndDate = end) }
+    fun clearFilters() = updateFilters { 
+        it.copy(
+            filterType = "All",
+            filterAccountId = "all",
+            filterCategoryId = "all",
+            filterStartDate = "",
+            filterEndDate = "",
+            searchQuery = ""
+        ) 
     }
 
     private fun applyFilters(transactions: List<Transaction>, state: TransactionsUiState): List<Transaction> {
         return transactions.filter { tx ->
             (state.filterType == "All" || tx.type == state.filterType) &&
-                    (state.filterAccountId == "all" || tx.accountId == state.filterAccountId) &&
-                    (state.filterCategoryId == "all" || tx.categoryId == state.filterCategoryId) &&
-                    (state.filterStartDate.isBlank() || tx.date >= state.filterStartDate) &&
-                    (state.filterEndDate.isBlank() || tx.date <= state.filterEndDate) &&
-                    (state.searchQuery.isBlank() || tx.description.contains(state.searchQuery, ignoreCase = true) || getCategoryName(tx.categoryId).contains(state.searchQuery, ignoreCase = true))
+            (state.filterAccountId == "all" || tx.accountId == state.filterAccountId) &&
+            (state.filterCategoryId == "all" || tx.categoryId == state.filterCategoryId) &&
+            (state.filterStartDate.isBlank() || tx.date >= state.filterStartDate) &&
+            (state.filterEndDate.isBlank() || tx.date <= state.filterEndDate) &&
+            (state.searchQuery.isBlank() || tx.description.contains(state.searchQuery, ignoreCase = true) || getCategoryName(tx.categoryId).contains(state.searchQuery, ignoreCase = true))
         }
     }
 
     fun showAddSheet(defaultType: String = "Expense") {
-        _uiState.update { it.copy(showAddEditSheet = true, editingTransaction = null) }
+        _uiState.update { it.copy(showAddEditSheet = true, editingTransaction = null, defaultAddType = defaultType) }
     }
 
     fun showEditSheet(transaction: Transaction) {
@@ -376,7 +357,7 @@ class TransactionsViewModel @Inject constructor(
 
     fun addTransaction(form: TransactionForm) {
         val uid = auth.currentUser?.uid ?: return
-
+        
         if (form.type == "Transfer") {
             if (form.amount.isBlank() || form.accountId.isBlank() || form.toAccountId.isBlank()) {
                 emit(TransactionEvent.ShowToast("Fill in all required fields", true))
@@ -392,7 +373,7 @@ class TransactionsViewModel @Inject constructor(
                 return
             }
         }
-
+        
         val amount = form.amount.toDoubleOrNull() ?: run {
             emit(TransactionEvent.ShowToast("Invalid amount", true))
             return
@@ -418,13 +399,11 @@ class TransactionsViewModel @Inject constructor(
                     )
                     db.collection("users").document(uid).collection("transfers").add(transferData).await()
 
-                    // Update balances
                     db.collection("users").document(uid).collection("accounts").document(fromAcc.id)
                         .update("balance", fromAcc.balance - amount).await()
                     db.collection("users").document(uid).collection("accounts").document(toAcc.id)
                         .update("balance", toAcc.balance + amount).await()
 
-                    // Charge handling for transfers
                     val chargeAmt = form.chargeAmount.toDoubleOrNull() ?: 0.0
                     if (chargeAmt > 0) {
                         val feesCategory = getOrCreateFeesCategory(uid)
@@ -469,7 +448,7 @@ class TransactionsViewModel @Inject constructor(
                             "categoryId" to feesCategory, "description" to (form.chargeNote.ifBlank { "Related charges / fees" }),
                             "date" to form.date, "isCharge" to true, "createdAt" to FieldValue.serverTimestamp()
                         )).await()
-
+                        
                         val acc = _uiState.value.accounts.find { it.id == form.accountId }
                         if (acc != null) {
                             db.collection("users").document(uid).collection("accounts").document(form.accountId)
@@ -480,7 +459,6 @@ class TransactionsViewModel @Inject constructor(
                 }
 
                 hideAddEditSheet()
-                loadAll()
             } catch (e: Exception) {
                 emit(TransactionEvent.ShowToast("Failed to add: ${e.message}", true))
             } finally {
@@ -499,8 +477,7 @@ class TransactionsViewModel @Inject constructor(
             try {
                 if (oldTx.isTransfer) {
                     val origId = oldTx.originalId ?: throw Exception("Missing transfer ID")
-
-                    // Revert old balances
+                    
                     val oldFromId = if (oldTx.transferDirection == "from") oldTx.accountId else oldTx.relatedAccountId!!
                     val oldToId = if (oldTx.transferDirection == "to") oldTx.accountId else oldTx.relatedAccountId!!
                     val oldAmt = oldTx.amount
@@ -513,10 +490,9 @@ class TransactionsViewModel @Inject constructor(
                     if (oldToAcc != null) db.collection("users").document(uid).collection("accounts")
                         .document(oldToId).update("balance", oldToAcc.balance - oldAmt).await()
 
-                    // Apply new transfer doc
                     val fromAcc = _uiState.value.accounts.find { it.id == form.accountId }
                     val toAcc = _uiState.value.accounts.find { it.id == form.toAccountId }
-
+                    
                     db.collection("users").document(uid).collection("transfers").document(origId).update(
                         mapOf(
                             "amount" to newAmount,
@@ -530,10 +506,9 @@ class TransactionsViewModel @Inject constructor(
                         )
                     ).await()
 
-                    // Apply new balances
                     val freshFromBal = db.collection("users").document(uid).collection("accounts").document(form.accountId).get().await().getDouble("balance") ?: 0.0
                     db.collection("users").document(uid).collection("accounts").document(form.accountId).update("balance", freshFromBal - newAmount).await()
-
+                    
                     val freshToBal = db.collection("users").document(uid).collection("accounts").document(form.toAccountId).get().await().getDouble("balance") ?: 0.0
                     db.collection("users").document(uid).collection("accounts").document(form.toAccountId).update("balance", freshToBal + newAmount).await()
 
@@ -570,9 +545,8 @@ class TransactionsViewModel @Inject constructor(
                     }
                     emit(TransactionEvent.ShowToast("Transaction updated!"))
                 }
-
+                
                 hideAddEditSheet()
-                loadAll()
             } catch (e: Exception) {
                 emit(TransactionEvent.ShowToast("Failed to update: ${e.message}", true))
             } finally {
@@ -615,7 +589,6 @@ class TransactionsViewModel @Inject constructor(
 
                 emit(TransactionEvent.ShowToast("Transaction deleted"))
                 hideDeleteConfirm()
-                loadAll()
             } catch (e: Exception) {
                 emit(TransactionEvent.ShowToast("Failed to delete: ${e.message}", true))
             } finally {
@@ -639,9 +612,6 @@ class TransactionsViewModel @Inject constructor(
                 )
                 val ref = db.collection("users").document(uid).collection("categories").add(data).await()
                 val newCat = CategoryItem(id = ref.id, name = name.trim(), type = type, color = color, isRiba = isRiba)
-                _uiState.update { state ->
-                    state.copy(categories = (state.categories + newCat).sortedBy { it.name })
-                }
                 emit(TransactionEvent.ShowToast("\"${name.trim()}\" added!"))
                 onAdded(newCat)
             } catch (e: Exception) {
