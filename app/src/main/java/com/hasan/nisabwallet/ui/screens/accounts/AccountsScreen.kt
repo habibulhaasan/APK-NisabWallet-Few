@@ -1,5 +1,6 @@
 package com.hasan.nisabwallet.ui.screens.accounts
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,7 +40,7 @@ fun AccountsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
-    
+
     var accountToDelete by remember { mutableStateOf<AccountItem?>(null) }
 
     LaunchedEffect(Unit) {
@@ -54,7 +56,7 @@ fun AccountsScreen(
         containerColor = Color(0xFFF9FAFB)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
@@ -99,7 +101,7 @@ fun AccountsScreen(
                                 Text("Load Defaults", fontSize = 13.sp)
                             }
                         }
-                        
+
                         Button(
                             onClick = { viewModel.openAddModal() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827)),
@@ -224,7 +226,7 @@ private fun AccountCard(
     onDelete: (AccountItem) -> Unit
 ) {
     val acc = item.account
-    
+
     val icon = when (acc.type) {
         "Cash" -> Icons.Default.AccountBalanceWallet
         "Bank" -> Icons.Default.AccountBalance

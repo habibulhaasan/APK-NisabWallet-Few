@@ -5,15 +5,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +26,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +36,7 @@ import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LoanDetailScreen(
     viewModel: LoanDetailViewModel = hiltViewModel(),
@@ -166,11 +172,10 @@ fun LoanDetailScreen(
 
             // 4-Grid Stats
             item {
-                @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatBox("Principal Amount", Icons.Default.AttachMoney, fmt(loan.principalAmount), Modifier.weight(1f, false).fillMaxWidth(0.48f))
                     StatBox("Interest Rate", Icons.Default.Percent, if (isQard) "0%" else "${loan.interestRate}%", Modifier.weight(1f, false).fillMaxWidth(0.48f), sub = if (isQard) "Qard Hasan" else "Annual")
-                    StatBox("Total Paid", Icons.Default.TrendingDown, fmt(loan.totalPaid), Modifier.weight(1f, false).fillMaxWidth(0.48f), valColor = Color(0xFF16A34A))
+                    StatBox("Total Paid", Icons.AutoMirrored.Filled.TrendingDown, fmt(loan.totalPaid), Modifier.weight(1f, false).fillMaxWidth(0.48f), valColor = Color(0xFF16A34A))
                     StatBox("Monthly Payment", Icons.Default.CalendarToday, loan.monthlyPayment?.let { fmt(it) } ?: "Flexible", Modifier.weight(1f, false).fillMaxWidth(0.48f), valColor = Color(0xFF2563EB))
                 }
             }
@@ -183,12 +188,12 @@ fun LoanDetailScreen(
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Loan Details", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), modifier = Modifier.padding(bottom = 8.dp))
-                        
+
                         DetailRow("Start Date", formatDisplayDate(loan.startDate))
                         if (!loan.endDate.isNullOrBlank()) DetailRow("End Date", formatDisplayDate(loan.endDate))
                         if (loan.totalMonths > 0) DetailRow("Duration", "${loan.totalMonths} months")
                         DetailRow("Remaining Balance", "৳${CurrencyFormatter.formatBDT(loan.remainingBalance)}", valColor = Color(0xFFDC2626))
-                        
+
                         if (!isQard) {
                             DetailRow("Total Interest", "৳${CurrencyFormatter.formatBDT(loan.totalInterest)}", valColor = Color(0xFFD97706))
                             DetailRow("Total Repayment", "৳${CurrencyFormatter.formatBDT(loan.totalRepayment)}")
@@ -196,7 +201,7 @@ fun LoanDetailScreen(
 
                         if (!loan.nextPaymentDue.isNullOrBlank() && loan.status == "active") DetailRow("Next Payment Due", formatDisplayDate(loan.nextPaymentDue), valColor = Color(0xFF2563EB))
                         if (!loan.lastPaymentDate.isNullOrBlank()) DetailRow("Last Payment", formatDisplayDate(loan.lastPaymentDate))
-                        
+
                         val accName = state.accounts.find { it.id == loan.accountId }?.name ?: "Unknown"
                         DetailRow("Payment Account", accName)
                         DetailRow("Status", if (loan.status == "active") "Active" else "Paid Off", valColor = if (loan.status == "active") Color(0xFF16A34A) else Color(0xFF2563EB))
@@ -210,7 +215,7 @@ fun LoanDetailScreen(
                 }
             }
 
-            // Early Payoff Calculator[cite: 12]
+            // Early Payoff Calculator
             if (!isQard && loan.status == "active" && state.earlyPayoff500 != null) {
                 item {
                     Card(
@@ -220,14 +225,14 @@ fun LoanDetailScreen(
                         Column(Modifier.padding(16.dp)) {
                             Text("Early Payoff Calculator", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
                             Text("See how extra payments can save you money and time:", fontSize = 13.sp, color = Color(0xFF4B5563), modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-                            
+
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 val p500 = state.earlyPayoff500!!
                                 Column(modifier = Modifier.weight(1f).background(Color(0xFFEFF6FF), RoundedCornerShape(8.dp)).padding(12.dp)) {
                                     Text("Extra ৳500/month", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1E3A8A))
                                     Spacer(Modifier.height(8.dp))
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Remaining:", fontSize = 11.sp, color = Color(0xFF1D4ED8)); Text("${p500.monthsRemaining} mo", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E3A8A)) }
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Saved:", fontSize = 11.sp, color = Color(0xFF1D4ED8)); Text("৳${String.format("%.2f", p500.savedInterest)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E3A8A)) }
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Saved:", fontSize = 11.sp, color = Color(0xFF1D4ED8)); Text("৳${String.format(Locale.US, "%.2f", p500.savedInterest)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E3A8A)) }
                                 }
 
                                 state.earlyPayoff1000?.let { p1000 ->
@@ -235,7 +240,7 @@ fun LoanDetailScreen(
                                         Text("Extra ৳1,000/month", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF14532D))
                                         Spacer(Modifier.height(8.dp))
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Remaining:", fontSize = 11.sp, color = Color(0xFF15803D)); Text("${p1000.monthsRemaining} mo", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF14532D)) }
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Saved:", fontSize = 11.sp, color = Color(0xFF15803D)); Text("৳${String.format("%.2f", p1000.savedInterest)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF14532D)) }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Saved:", fontSize = 11.sp, color = Color(0xFF15803D)); Text("৳${String.format(Locale.US, "%.2f", p1000.savedInterest)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF14532D)) }
                                     }
                                 }
                             }
@@ -244,7 +249,7 @@ fun LoanDetailScreen(
                 }
             }
 
-            // Amortization Schedule[cite: 12]
+            // Amortization Schedule
             if (!isQard && state.amortizationSchedule.isNotEmpty()) {
                 item {
                     Card(
@@ -286,7 +291,7 @@ fun LoanDetailScreen(
                 }
             }
 
-            // Payment History[cite: 12]
+            // Payment History
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
@@ -294,7 +299,7 @@ fun LoanDetailScreen(
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Payment History (${state.payments.size})", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
+                            Text("Payment History (${state.payments.size} payments)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
                             Button(
                                 onClick = { viewModel.requestCsvExport() },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF374151)),
@@ -308,7 +313,7 @@ fun LoanDetailScreen(
                                 Text("Export CSV", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
                         }
-                        
+
                         Spacer(Modifier.height(16.dp))
 
                         if (state.payments.isEmpty()) {
@@ -318,25 +323,25 @@ fun LoanDetailScreen(
                                 Text("No payments recorded yet", fontSize = 13.sp, color = Color(0xFF6B7280))
                             }
                         } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.payments.forEach { p ->
-                                    val accName = state.accounts.find { it.id == p.accountId }?.name ?: "Unknown"
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp)).padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text(formatDisplayDate(p.paymentDate), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                            Text("From: $accName", fontSize = 11.sp, color = Color(0xFF6B7280))
-                                            if (p.notes.isNotBlank()) Text(p.notes, fontSize = 11.sp, color = Color(0xFF4B5563), modifier = Modifier.padding(top = 2.dp))
-                                        }
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text(fmt(p.amount), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), fontFamily = FontFamily.Monospace)
-                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text("P: ${CurrencyFormatter.formatBDT(p.principalPaid)}", fontSize = 10.sp, color = Color(0xFF16A34A))
-                                                if (p.interestPaid > 0) Text("I: ${CurrencyFormatter.formatBDT(p.interestPaid)}", fontSize = 10.sp, color = Color(0xFFD97706))
-                                            }
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                                Column(Modifier.width(600.dp)) {
+                                    Row(Modifier.fillMaxWidth().background(Color(0xFFF9FAFB)).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                        Text("Date", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
+                                        Text("Amount", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563), textAlign = TextAlign.End)
+                                        Text("Principal", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563), textAlign = TextAlign.End)
+                                        Text("Interest", modifier = Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563), textAlign = TextAlign.End)
+                                        Text("Account", modifier = Modifier.weight(1.5f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
+                                        Text("Notes", modifier = Modifier.weight(1.5f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
+                                    }
+                                    state.payments.forEach { p ->
+                                        val accName = state.accounts.find { it.id == p.accountId }?.name ?: "Unknown"
+                                        Row(Modifier.fillMaxWidth().border(1.dp, Color(0xFFE5E7EB)).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                            Text(formatDisplayDate(p.paymentDate), modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFF111827))
+                                            Text(fmt(p.amount), modifier = Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), textAlign = TextAlign.End)
+                                            Text(fmt(p.principalPaid), modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFF16A34A), textAlign = TextAlign.End)
+                                            Text(fmt(p.interestPaid), modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFFD97706), textAlign = TextAlign.End)
+                                            Text(accName, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF374151))
+                                            Text(p.notes.ifBlank { "-" }, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF6B7280))
                                         }
                                     }
                                 }
@@ -374,9 +379,9 @@ private fun DetailRow(label: String, value: String, valColor: Color = Color(0xFF
 
 private fun formatDisplayDate(dateStr: String): String {
     if (dateStr.isBlank()) return "N/A"
-    return runCatching {
+    return try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val out = SimpleDateFormat("dd/MM/yyyy", Locale.US)
         out.format(sdf.parse(dateStr)!!)
-    }.getOrDefault(dateStr)
+    } catch (e: Exception) { dateStr }
 }

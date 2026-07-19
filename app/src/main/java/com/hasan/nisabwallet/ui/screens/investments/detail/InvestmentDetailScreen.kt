@@ -1,5 +1,7 @@
 package com.hasan.nisabwallet.ui.screens.investments.detail
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
@@ -48,11 +51,19 @@ fun InvestmentDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
 
+    val createCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let { viewModel.executeCsvExport(it) }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is InvestmentDetailEvent.ShowToast -> snackbarHostState.showSnackbar(event.message)
                 is InvestmentDetailEvent.NavigateBack -> onNavigateBack()
+                is InvestmentDetailEvent.TriggerCsvExport -> {
+                    val name = state.investment?.name?.replace(" ", "_") ?: "investment"
+                    createCsvLauncher.launch("${name}_dividends.csv")
+                }
             }
         }
     }
@@ -66,7 +77,7 @@ fun InvestmentDetailScreen(
 
     val inv = state.investment!!
     val isProfit = inv.absoluteReturn >= 0
-    val typeColor = runCatching { Color(android.graphics.Color.parseColor(InvestmentConstants.getColor(inv.type))) }.getOrDefault(Color.Gray)
+    val typeColor = try { Color(InvestmentConstants.getColor(inv.type).toColorInt()) } catch (e: Exception) { Color.Gray }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -120,9 +131,9 @@ fun InvestmentDetailScreen(
                     DetailStatBox(label = "Invested", value = fmt(inv.totalInvested), modifier = Modifier.weight(1f, false).fillMaxWidth(0.48f))
                     DetailStatBox(label = "Current Value", value = fmt(inv.totalCurrentValue), modifier = Modifier.weight(1f, false).fillMaxWidth(0.48f))
                     DetailStatBox(
-                        label = "Returns", 
-                        value = fmt(inv.absoluteReturn), 
-                        subValue = "${if(isProfit) "+" else ""}${String.format("%.2f", inv.percentageReturn)}%",
+                        label = "Returns",
+                        value = fmt(inv.absoluteReturn),
+                        subValue = "${if(isProfit) "+" else ""}${String.format(Locale.US, "%.2f", inv.percentageReturn)}%",
                         isPositive = isProfit,
                         modifier = Modifier.weight(1f, false).fillMaxWidth(0.48f)
                     )
@@ -143,7 +154,7 @@ fun InvestmentDetailScreen(
                             Text("Purchase Information", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF111827))
                         }
                         Spacer(Modifier.height(16.dp))
-                        
+
                         FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             InfoField("Purchase Date", formatDisplayDate(inv.purchaseDate), Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             InfoField("Purchase Price", fmt(inv.purchasePrice), Modifier.weight(1f, false).fillMaxWidth(0.45f))
@@ -154,7 +165,7 @@ fun InvestmentDetailScreen(
                             if (inv.interestRate != null) InfoField("Interest Rate", "${inv.interestRate}%/yr", Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             if (inv.maturityDate.isNotBlank()) InfoField("Maturity Date", formatDisplayDate(inv.maturityDate), Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             if (inv.maturityAmount != null) InfoField("Maturity Amount", fmt(inv.maturityAmount), Modifier.weight(1f, false).fillMaxWidth(0.45f))
-                            
+
                             InfoField("Category", inv.category.replaceFirstChar { it.uppercase() }, Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             InfoField("Risk Level", inv.riskLevel.replaceFirstChar { it.uppercase() }, Modifier.weight(1f, false).fillMaxWidth(0.45f))
                         }
@@ -251,7 +262,7 @@ fun InvestmentDetailScreen(
                                     Text(fmt(inv.absoluteReturn), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (isProfit) Color(0xFF16A34A) else Color(0xFFDC2626), fontFamily = FontFamily.Monospace)
                                 }
                             }
-                            Text("${if(isProfit) "+" else ""}${String.format("%.2f", inv.percentageReturn)}%", fontSize = 20.sp, fontWeight = FontWeight.Black, color = if (isProfit) Color(0xFF16A34A) else Color(0xFFDC2626))
+                            Text("${if(isProfit) "+" else ""}${String.format(Locale.US, "%.2f", inv.percentageReturn)}%", fontSize = 20.sp, fontWeight = FontWeight.Black, color = if (isProfit) Color(0xFF16A34A) else Color(0xFFDC2626))
                         }
 
                         Spacer(Modifier.height(12.dp))
@@ -262,7 +273,7 @@ fun InvestmentDetailScreen(
                                 Text("Net Total Returns", fontSize = 12.sp, color = Color(0xFF7E22CE))
                                 Spacer(Modifier.height(4.dp))
                                 Text(fmt(netTotal), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9333EA), fontFamily = FontFamily.Monospace)
-                                Text("${String.format("%.2f", netPct)}% return", fontSize = 10.sp, color = Color(0xFF9333EA), modifier = Modifier.padding(top = 2.dp))
+                                Text("${String.format(Locale.US, "%.2f", netPct)}% return", fontSize = 10.sp, color = Color(0xFF9333EA), modifier = Modifier.padding(top = 2.dp))
                             }
                         }
                     }
@@ -320,11 +331,13 @@ private fun InfoField(label: String, value: String, modifier: Modifier = Modifie
 
 private fun formatDisplayDate(dateStr: String): String {
     if (dateStr.isBlank()) return "-"
-    return runCatching {
+    return try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val out = SimpleDateFormat("MMM d, yyyy", Locale.US)
         out.format(sdf.parse(dateStr)!!)
-    }.getOrDefault(dateStr)
+    } catch (e: Exception) {
+        dateStr
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -341,7 +354,7 @@ private fun AddDividendModal(
             }
 
             DateSelectionField(label = "Payment Date *", dateString = form.date, onDateSelected = { onUpdate { f -> f.copy(date = it) } })
-            
+
             OutlinedTextField(
                 value = form.amount, onValueChange = { onUpdate { f -> f.copy(amount = it) } },
                 label = { Text("Amount *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
@@ -366,9 +379,9 @@ private fun AddDividendModal(
             var accExpanded by remember { mutableStateOf(false) }
             Box {
                 OutlinedTextField(
-                    value = accounts.find { it.id == form.accountId }?.name ?: "Select account", 
-                    onValueChange = {}, readOnly = true, label = { Text("Deposit to Account *") }, 
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), 
+                    value = accounts.find { it.id == form.accountId }?.name ?: "Select account",
+                    onValueChange = {}, readOnly = true, label = { Text("Deposit to Account *") },
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                     trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) }
                 )
                 Box(Modifier.matchParentSize().clickable { accExpanded = true })
@@ -529,7 +542,7 @@ private fun AddEditInvestmentModal(
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
                 Button(
-                    onClick = onSave, disabled = isSaving, modifier = Modifier.weight(1f).height(48.dp),
+                    onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp),
                     shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))
                 ) {
                     if (isSaving) {
@@ -557,10 +570,10 @@ private fun DateSelectionField(
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = runCatching {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        initialSelectedDateMillis = try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
             sdf.parse(dateString)?.time
-        }.getOrNull()
+        } catch (e: Exception) { null }
     )
 
     Box(modifier = modifier) {
@@ -578,7 +591,7 @@ private fun DateSelectionField(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                         onDateSelected(sdf.format(Date(millis)))
                     }
                     showPicker = false

@@ -34,11 +34,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
+
+// ─── Import New Screens ───
 import com.hasan.nisabwallet.ui.screens.admin.grocery.MonthlyGroceryScreen
 import com.hasan.nisabwallet.ui.screens.admin.ledger.MonthlyLedgerScreen
 import com.hasan.nisabwallet.ui.screens.auth.LoginScreen
@@ -47,6 +51,15 @@ import com.hasan.nisabwallet.ui.screens.common.ComingSoonScreen
 import com.hasan.nisabwallet.ui.screens.dashboard.DashboardScreen
 import com.hasan.nisabwallet.ui.screens.settings.SettingsScreen
 import com.hasan.nisabwallet.ui.screens.transactions.TransactionsScreen
+import com.hasan.nisabwallet.ui.screens.accounts.AccountsScreen
+import com.hasan.nisabwallet.ui.screens.categories.CategoriesScreen
+import com.hasan.nisabwallet.ui.screens.investments.InvestmentsScreen
+import com.hasan.nisabwallet.ui.screens.investments.detail.InvestmentDetailScreen
+import com.hasan.nisabwallet.ui.screens.loans.LoansScreen
+import com.hasan.nisabwallet.ui.screens.loans.detail.LoanDetailScreen
+import com.hasan.nisabwallet.ui.screens.lendings.LendingsScreen
+import com.hasan.nisabwallet.ui.screens.lendings.detail.LendingDetailScreen
+import com.hasan.nisabwallet.ui.screens.jewellery.JewelleryScreen
 
 object Routes {
     const val LOGIN = "login"
@@ -58,15 +71,25 @@ object Routes {
     const val SETTINGS = "dashboard/settings"
 
     const val ACCOUNTS = "dashboard/accounts"
+    const val CATEGORIES = "dashboard/categories" // Added for Transactions module routing
     const val TRANSFER = "dashboard/transfer"
-    const val LOANS = "dashboard/loans"
-    const val LENDINGS = "dashboard/lendings"
     const val GOALS = "dashboard/goals"
     const val JEWELLERY = "dashboard/jewellery"
-    const val INVESTMENTS = "dashboard/investments"
     const val ANALYTICS = "dashboard/analytics"
     const val ZAKAT = "dashboard/zakat"
-    const val SUBSCRIPTION = "dashboard/subscription" // Added subscription route
+    const val SUBSCRIPTION = "dashboard/subscription"
+
+    const val INVESTMENTS = "dashboard/investments"
+    const val INVESTMENT_DETAIL = "dashboard/investments/{investmentId}"
+    fun createInvestmentDetailRoute(id: String) = "dashboard/investments/$id"
+
+    const val LOANS = "dashboard/loans"
+    const val LOAN_DETAIL = "dashboard/loans/{loanId}"
+    fun createLoanDetailRoute(id: String) = "dashboard/loans/$id"
+
+    const val LENDINGS = "dashboard/lendings"
+    const val LENDING_DETAIL = "dashboard/lendings/{lendingId}"
+    fun createLendingDetailRoute(id: String) = "dashboard/lendings/$id"
 
     val BOTTOM_NAV_ROUTES = listOf(DASHBOARD, TRANSACTIONS, MONTHLY_LEDGER, MONTHLY_GROCERY, SETTINGS)
 }
@@ -103,7 +126,7 @@ fun NisabWalletRootNav(
                 modifier = Modifier.padding(padding),
             )
 
-            // Dim screen mask when the floating menu is active
+            // Dim screen mask when the floating menu is active[cite: 18]
             if (showFloatingNav && isMenuExpanded) {
                 Box(
                     modifier = Modifier
@@ -116,7 +139,7 @@ fun NisabWalletRootNav(
                 )
             }
 
-            // Context Floating Navigation System Layout
+            // Context Floating Navigation System Layout[cite: 18]
             if (showFloatingNav) {
                 Column(
                     modifier = Modifier
@@ -300,18 +323,80 @@ fun NisabWalletNavGraph(
             )
         }
 
+        // ─── Newly Implemented Modules ───
+
+        composable(Routes.ACCOUNTS) {
+            AccountsScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.CATEGORIES) {
+            CategoriesScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.JEWELLERY) {
+            JewelleryScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.INVESTMENTS) {
+            InvestmentsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { id -> navController.navigate(Routes.createInvestmentDetailRoute(id)) }
+            )
+        }
+
+        composable(
+            route = Routes.INVESTMENT_DETAIL,
+            arguments = listOf(navArgument("investmentId") { type = NavType.StringType })
+        ) {
+            InvestmentDetailScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { /* Edit is handled internally via BottomSheet */ }
+            )
+        }
+
+        composable(Routes.LOANS) {
+            LoansScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { id -> navController.navigate(Routes.createLoanDetailRoute(id)) }
+            )
+        }
+
+        composable(
+            route = Routes.LOAN_DETAIL,
+            arguments = listOf(navArgument("loanId") { type = NavType.StringType })
+        ) {
+            LoanDetailScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { /* Edit is handled internally via BottomSheet */ }
+            )
+        }
+
+        composable(Routes.LENDINGS) {
+            LendingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { id -> navController.navigate(Routes.createLendingDetailRoute(id)) }
+            )
+        }
+
+        composable(
+            route = Routes.LENDING_DETAIL,
+            arguments = listOf(navArgument("lendingId") { type = NavType.StringType })
+        ) {
+            LendingDetailScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ─── Remaining Placeholders[cite: 18] ───
+
         val placeholders = listOf(
-            Routes.ACCOUNTS to "Accounts",
             Routes.TRANSFER to "Transfer",
-            Routes.LOANS to "Loans",
-            Routes.LENDINGS to "Lendings",
             Routes.GOALS to "Goals",
-            Routes.JEWELLERY to "Jewellery",
-            Routes.INVESTMENTS to "Investments",
             Routes.ANALYTICS to "Analytics",
             Routes.ZAKAT to "Zakat",
             Routes.SUBSCRIPTION to "Subscription",
         )
+
         placeholders.forEach { (route, title) ->
             composable(route) {
                 ComingSoonScreen(title = title) { navController.popBackStack() }

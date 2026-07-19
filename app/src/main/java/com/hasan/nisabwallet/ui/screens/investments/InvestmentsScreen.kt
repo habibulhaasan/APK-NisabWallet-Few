@@ -1,6 +1,5 @@
 package com.hasan.nisabwallet.ui.screens.investments
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +33,10 @@ import androidx.core.graphics.toColorInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -58,7 +62,7 @@ fun InvestmentsScreen(
         containerColor = Color(0xFFF9FAFB)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
@@ -142,10 +146,10 @@ fun InvestmentsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             val retColor = if (state.summary.absoluteReturn >= 0) Color(0xFF16A34A) else Color(0xFFDC2626)
                             SummaryCard(
-                                title = "Total Returns", 
+                                title = "Total Returns",
                                 icon = if (state.summary.absoluteReturn >= 0) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
                                 value = fmt(state.summary.absoluteReturn),
-                                subtitle = "${if (state.summary.percentageReturn >= 0) "+" else ""}${String.format("%.2f", state.summary.percentageReturn)}%",
+                                subtitle = "${if (state.summary.percentageReturn >= 0) "+" else ""}${String.format(Locale.US, "%.2f", state.summary.percentageReturn)}%",
                                 valueColor = retColor,
                                 modifier = Modifier.weight(1f)
                             )
@@ -179,7 +183,7 @@ fun InvestmentsScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     state.allocations.forEach { alloc ->
-                                        val color = runCatching { Color(android.graphics.Color.parseColor(InvestmentConstants.getColor(alloc.type))) }.getOrDefault(Color.Gray)
+                                        val color = try { Color(InvestmentConstants.getColor(alloc.type).toColorInt()) } catch (e: Exception) { Color.Gray }
                                         Row(
                                             modifier = Modifier.weight(1f, fill = false).fillMaxWidth(0.48f).background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp)).padding(10.dp),
                                             verticalAlignment = Alignment.CenterVertically
@@ -188,7 +192,7 @@ fun InvestmentsScreen(
                                             Spacer(Modifier.width(8.dp))
                                             Column {
                                                 Text(InvestmentConstants.getLabel(alloc.type), fontSize = 11.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                Text("${String.format("%.1f", alloc.percentage)}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                                Text("${String.format(Locale.US, "%.1f", alloc.percentage)}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                                 Text(fmt(alloc.value), fontSize = 10.sp, color = Color(0xFF6B7280))
                                             }
                                         }
@@ -237,7 +241,7 @@ fun InvestmentsScreen(
                             InvestmentCard(inv = inv, fmt = fmt, onClick = { onNavigateToDetail(inv.id) })
                         }
                     }
-                    
+
                     item { Spacer(Modifier.height(40.dp)) }
                 }
             }
@@ -257,7 +261,14 @@ fun InvestmentsScreen(
 }
 
 @Composable
-private fun SummaryCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, subtitle: String? = null, valueColor: Color = Color(0xFF111827), modifier: Modifier = Modifier) {
+private fun SummaryCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    valueColor: Color = Color(0xFF111827)
+) {
     Card(
         modifier = modifier, shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))
@@ -277,7 +288,13 @@ private fun SummaryCard(title: String, icon: androidx.compose.ui.graphics.vector
 }
 
 @Composable
-private fun FilterDropdown(label: String, value: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit, modifier: Modifier) {
+private fun FilterDropdown(
+    label: String,
+    value: String,
+    options: List<Pair<String, String>>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     val display = options.find { it.first == value }?.second ?: label
     Box(modifier) {
@@ -305,7 +322,7 @@ private fun FilterDropdown(label: String, value: String, options: List<Pair<Stri
 private fun InvestmentCard(inv: Investment, fmt: (Double) -> String, onClick: () -> Unit) {
     val isProfit = inv.absoluteReturn >= 0
     val retColor = if (isProfit) Color(0xFF16A34A) else Color(0xFFDC2626)
-    val typeColor = runCatching { Color(android.graphics.Color.parseColor(InvestmentConstants.getColor(inv.type))) }.getOrDefault(Color.Gray)
+    val typeColor = try { Color(InvestmentConstants.getColor(inv.type).toColorInt()) } catch (e: Exception) { Color.Gray }
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
@@ -329,12 +346,12 @@ private fun InvestmentCard(inv: Investment, fmt: (Double) -> String, onClick: ()
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(fmt(inv.totalCurrentValue), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                        Text("${if (isProfit) "+" else ""}${String.format("%.2f", inv.percentageReturn)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = retColor)
+                        Text("${if (isProfit) "+" else ""}${String.format(Locale.US, "%.2f", inv.percentageReturn)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = retColor)
                     }
                 }
-                
+
                 Spacer(Modifier.height(12.dp))
-                
+
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Invested", fontSize = 10.sp, color = Color(0xFF6B7280))
@@ -412,9 +429,9 @@ private fun AddEditInvestmentModal(
                 var accExpanded by remember { mutableStateOf(false) }
                 Box {
                     OutlinedTextField(
-                        value = accounts.find { it.id == form.accountId }?.name ?: "Select account", 
-                        onValueChange = {}, readOnly = true, label = { Text("Fund from Account") }, 
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), 
+                        value = accounts.find { it.id == form.accountId }?.name ?: "Select account",
+                        onValueChange = {}, readOnly = true, label = { Text("Fund from Account") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
                         trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
                         enabled = form.id == null // Lock account selection if editing
                     )
@@ -531,7 +548,7 @@ private fun AddEditInvestmentModal(
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
                 Button(
-                    onClick = onSave, disabled = isSaving, modifier = Modifier.weight(1f).height(48.dp),
+                    onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp),
                     shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))
                 ) {
                     if (isSaving) {
@@ -559,12 +576,12 @@ private fun DateSelectionField(
     modifier: Modifier = Modifier
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    
+
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = runCatching {
+        initialSelectedDateMillis = try {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
             sdf.parse(dateString)?.time
-        }.getOrNull()
+        } catch (e: Exception) { null }
     )
 
     Box(modifier = modifier) {

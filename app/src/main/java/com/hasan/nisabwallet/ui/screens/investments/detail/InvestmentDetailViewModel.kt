@@ -9,9 +9,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
-import com.hasan.nisabwallet.ui.screens.investments.Investment
 import com.hasan.nisabwallet.ui.screens.investments.InvestmentConstants
 import com.hasan.nisabwallet.ui.screens.investments.InvestmentForm
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -94,25 +92,27 @@ data class InvestmentDetailUiState(
     val investment: DetailedInvestment? = null,
     val syncStatus: String = "Connecting...",
     val accounts: List<InvestmentAccount> = emptyList(),
-    
+
     val showEditModal: Boolean = false,
     val editForm: InvestmentForm = InvestmentForm(),
-    
+
     val showDividendModal: Boolean = false,
     val dividendForm: DividendForm = DividendForm(),
-    
+
     val showDeleteConfirm: Boolean = false
 )
 
 sealed class InvestmentDetailEvent {
     data class ShowToast(val message: String, val isError: Boolean = false) : InvestmentDetailEvent()
     object NavigateBack : InvestmentDetailEvent()
+    object TriggerCsvExport : InvestmentDetailEvent() // Restored CSV Trigger
 }
 
 @HiltViewModel
 class InvestmentDetailViewModel @Inject constructor(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    @ApplicationContext private val context: Context, // Restored Context for CSV
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -126,7 +126,7 @@ class InvestmentDetailViewModel @Inject constructor(
 
     private var invListener: ListenerRegistration? = null
     private var accListener: ListenerRegistration? = null
-    
+
     private var rawAccounts = emptyList<InvestmentAccount>()
 
     init {
@@ -155,7 +155,7 @@ class InvestmentDetailViewModel @Inject constructor(
                     emitEvent(InvestmentDetailEvent.ShowToast("Sync error: ${e.message}", true))
                     return@addSnapshotListener
                 }
-                
+
                 if (snap != null && snap.exists()) {
                     val status = when {
                         snap.metadata.hasPendingWrites() -> "Syncing..."
@@ -218,8 +218,46 @@ class InvestmentDetailViewModel @Inject constructor(
         accListener?.remove()
     }
 
-    // ─── Actions ───
+    // ─── CSV Export Logic ───
+    fun requestCsvExport() {
+        val dividends = _uiState.value.investment?.dividends ?: emptyList()
+        if (dividends.isEmpty()) {
+            emitEvent(InvestmentDetailEvent.ShowToast("No payments to export", true))
+            return
+        }
+        viewModelScope.launch { _events.emit(InvestmentDetailEvent.TriggerCsvExport) }
+    }
 
+    fun executeCsvExport(uri: Uri) {
+        val inv = _uiState.value.investment ?: return
+        val sdfIn = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val sdfOut = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+
+        viewModelScope.launch {
+            try {
+                val csvContent = buildString {
+                    append("Date,Amount,Type,Notes\n")
+                    inv.dividends.forEach { d ->
+                        val displayDate = runCatching { sdfOut.format(sdfIn.parse(d.date)!!) }.getOrDefault(d.date)
+                        append("\"$displayDate\",\"${d.amount}\",\"${d.type.replaceFirstChar { it.uppercase() }}\",\"${d.notes.replace("\"", "\"\"")}\"\n")
+                    }
+                }
+
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        BufferedWriter(OutputStreamWriter(out)).use { writer ->
+                            writer.write(csvContent)
+                        }
+                    }
+                }
+                emitEvent(InvestmentDetailEvent.ShowToast("Exported successfully"))
+            } catch (e: Exception) {
+                emitEvent(InvestmentDetailEvent.ShowToast("Export failed: ${e.message}", true))
+            }
+        }
+    }
+
+    // ─── Actions ───
     fun openDeleteConfirm() = _uiState.update { it.copy(showDeleteConfirm = true) }
     fun closeDeleteConfirm() = _uiState.update { it.copy(showDeleteConfirm = false) }
 
@@ -272,22 +310,22 @@ class InvestmentDetailViewModel @Inject constructor(
                     "notes" to form.notes.trim(),
                     "recordedAt" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
                 )
-                
+
                 val currentTotal = inv.totalDividends + amt
-                
+
                 db.collection("users").document(uid).collection("investments").document(investmentId)
                     .update(
                         "dividends", FieldValue.arrayUnion(newDividend),
                         "totalDividends", currentTotal,
                         "updatedAt", FieldValue.serverTimestamp()
                     ).await()
-                
+
                 // DOUBLE ENTRY: Add to Account & Log Income Transaction
                 val acc = rawAccounts.find { it.id == form.accountId }
                 if (acc != null) {
                     db.collection("users").document(uid).collection("accounts").document(acc.id)
                         .update("balance", acc.balance + amt).await()
-                        
+
                     val catId = ensureCategory(uid, "Investment Return", "Income", "#06B6D4")
                     db.collection("users").document(uid).collection("transactions").add(
                         mapOf(
@@ -311,9 +349,9 @@ class InvestmentDetailViewModel @Inject constructor(
     // ─── Edit Modal Logic ───
     fun openEditModal() {
         val inv = _uiState.value.investment ?: return
-        _uiState.update { 
+        _uiState.update {
             it.copy(
-                showEditModal = true, 
+                showEditModal = true,
                 editForm = InvestmentForm(
                     id = inv.id,
                     type = inv.type,
@@ -350,7 +388,7 @@ class InvestmentDetailViewModel @Inject constructor(
     fun updateInvestment() {
         val uid = auth.currentUser?.uid ?: return
         val form = _uiState.value.editForm
-        
+
         if (form.name.trim().isBlank()) {
             emitEvent(InvestmentDetailEvent.ShowToast("Please enter investment name", true))
             return
@@ -407,7 +445,7 @@ class InvestmentDetailViewModel @Inject constructor(
 
                 db.collection("users").document(uid).collection("investments").document(investmentId)
                     .set(data, SetOptions.merge()).await()
-                    
+
                 emitEvent(InvestmentDetailEvent.ShowToast("Investment updated"))
                 closeEditModal()
             } catch (e: Exception) {

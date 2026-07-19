@@ -1,6 +1,5 @@
 package com.hasan.nisabwallet.ui.screens.lendings
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,7 +25,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +32,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -58,7 +60,7 @@ fun LendingsScreen(
         containerColor = Color(0xFFF9FAFB)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
@@ -93,14 +95,14 @@ fun LendingsScreen(
                     }
                 }
 
-                // Summary Cards - Horizontal scrollable or wrapped FlowRow
+                // Summary Cards
                 item {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SummaryCard("Total Lent", fmt(state.totalLent), Icons.Default.TrendingUp, Color(0xFF2563EB), Modifier.weight(1f, false).fillMaxWidth(0.3f))
+                        SummaryCard("Total Lent", fmt(state.totalLent), Icons.AutoMirrored.Filled.TrendingUp, Color(0xFF2563EB), Modifier.weight(1f, false).fillMaxWidth(0.3f))
                         SummaryCard("Repaid", fmt(state.totalRepaid), Icons.Default.CheckCircle, Color(0xFF16A34A), Modifier.weight(1f, false).fillMaxWidth(0.3f))
                         SummaryCard("Outstanding", fmt(state.totalOutstanding), Icons.Default.AttachMoney, Color(0xFFDC2626), Modifier.weight(1f, false).fillMaxWidth(0.3f))
                         SummaryCard("Active", state.activeCount.toString(), Icons.Default.AccessTime, Color(0xFFEA580C), Modifier.weight(1f, false).fillMaxWidth(0.3f))
@@ -161,21 +163,27 @@ fun LendingsScreen(
     if (state.showLendingModal) {
         AddEditLendingModal(
             form = state.lendingForm, accounts = state.accounts, isSaving = state.isSaving,
-            onUpdateForm = { viewModel.updateLendingForm(it) }, onDismiss = { viewModel.closeLendingModal() }, onSave = { viewModel.saveLending() }
+            onUpdateForm = { newForm -> viewModel.updateLendingForm { newForm } },
+            onDismiss = { viewModel.closeLendingModal() },
+            onSave = { viewModel.saveLending() }
         )
     }
 
     if (state.showPaymentModal && state.selectedLending != null) {
         PaymentModal(
             form = state.paymentForm, lending = state.selectedLending!!, isSaving = state.isSaving,
-            onUpdateForm = { viewModel.updatePaymentForm(it) }, onDismiss = { viewModel.closePaymentModal() }, onSave = { viewModel.submitPayment() }
+            onUpdateForm = { newForm -> viewModel.updatePaymentForm { newForm } },
+            onDismiss = { viewModel.closePaymentModal() },
+            onSave = { viewModel.submitPayment() }
         )
     }
 
     if (state.showReminderModal && state.selectedLending != null) {
         ReminderModal(
             message = state.reminderMessage, lending = state.selectedLending!!,
-            onMessageChange = { viewModel.updateReminderMessage(it) }, onDismiss = { viewModel.closeReminderModal() }, onSend = { viewModel.sendReminder() }
+            onMessageChange = { viewModel.updateReminderMessage(it) },
+            onDismiss = { viewModel.closeReminderModal() },
+            onSend = { viewModel.sendReminder() }
         )
     }
 
@@ -208,6 +216,7 @@ private fun SummaryCard(title: String, value: String, icon: androidx.compose.ui.
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LendingCard(
     lending: Lending, statusInfo: LendingStatusInfo, fmt: (Double) -> String,
@@ -228,7 +237,7 @@ private fun LendingCard(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                     Row(Modifier.weight(1f)) {
                         Box(modifier = Modifier.size(44.dp).background(if(isQard) Color(0xFF059669) else Color(0xFF2563EB), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Security, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            Icon(if (isQard) Icons.Default.Money else Icons.Default.AccountBalance, null, tint = Color.White, modifier = Modifier.size(24.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column {
@@ -260,8 +269,8 @@ private fun LendingCard(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         if (lending.status == "active") {
-                            IconButton(onClick = onPayment, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Payments, "Payment", tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp)) }
-                            IconButton(onClick = onReminder, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Send, "Reminder", tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
+                            IconButton(onClick = onPayment, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Payment, "Payment", tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp)) }
+                            IconButton(onClick = onReminder, modifier = Modifier.size(32.dp)) { Icon(Icons.AutoMirrored.Filled.Send, "Reminder", tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
                         }
                         IconButton(onClick = onView, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Visibility, "View", tint = Color(0xFF4B5563), modifier = Modifier.size(18.dp)) }
                         IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Edit, "Edit", tint = Color(0xFF4B5563), modifier = Modifier.size(18.dp)) }
@@ -273,9 +282,9 @@ private fun LendingCard(
                 Column(Modifier.padding(vertical = 12.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("৳${CurrencyFormatter.formatBDT(lending.totalRepaid)} / ৳${CurrencyFormatter.formatBDT(lending.principalAmount)}", fontSize = 11.sp, color = Color(0xFF4B5563))
-                        Text("${statusInfo.percentagePaid}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
+                        Text("${String.format(Locale.US, "%.1f", statusInfo.percentagePaid)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
                     }
-                    LinearProgressIndicator(progress = { (statusInfo.percentagePaid / 100f).toFloat() }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
+                    LinearProgressIndicator(progress = { (statusInfo.percentagePaid / 100f).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
                 }
 
                 // Details Grid
@@ -290,7 +299,6 @@ private fun LendingCard(
                 if (lending.witnesses.isNotEmpty()) {
                     HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(vertical = 12.dp))
                     Text("Witnesses:", fontSize = 10.sp, color = Color(0xFF6B7280))
-                    @OptIn(ExperimentalLayoutApi::class)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
                         lending.witnesses.forEach { w ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -321,7 +329,7 @@ private fun AddEditLendingModal(
             HorizontalDivider()
 
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                
+
                 // Borrower Info
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -454,7 +462,7 @@ private fun AddEditLendingModal(
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
                 Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))) {
-                    if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") } 
+                    if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") }
                     else Text(if(form.id != null) "Update Record" else "Create Record")
                 }
             }
@@ -505,7 +513,7 @@ private fun PaymentModal(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
                     Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))) {
-                        if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") } 
+                        if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") }
                         else Text("Record Payment")
                     }
                 }
@@ -550,7 +558,7 @@ private fun ReminderModal(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
                     Button(onClick = onSend, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
-                        Icon(Icons.Default.Send, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Log Reminder")
+                        Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Log Reminder")
                     }
                 }
             }
@@ -564,7 +572,10 @@ private fun ReminderModal(
 private fun DateSelectionField(label: String, dateString: String, onDateSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = runCatching { val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }; sdf.parse(dateString)?.time }.getOrNull()
+        initialSelectedDateMillis = try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            sdf.parse(dateString)?.time
+        } catch(e: Exception) { null }
     )
 
     Box(modifier = modifier) {

@@ -77,7 +77,7 @@ sealed class LoanDetailEvent {
 class LoanDetailViewModel @Inject constructor(
     private val db: FirebaseFirestore,
     private val auth: FirebaseAuth,
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -175,12 +175,12 @@ class LoanDetailViewModel @Inject constructor(
 
     private fun combineAndEmit() {
         val loan = rawLoan ?: return
-        
+
         val schedule = generateAmortizationSchedule(loan)
         val payoff500 = calculateEarlyPayoff(loan, 500.0)
         val payoff1000 = calculateEarlyPayoff(loan, 1000.0)
 
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 isLoading = false,
                 loan = loan,
@@ -293,7 +293,6 @@ class LoanDetailViewModel @Inject constructor(
     }
 
     fun executeCsvExport(uri: Uri) {
-        val loan = rawLoan ?: return
         val sdfIn = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val sdfOut = SimpleDateFormat("dd/MM/yyyy", Locale.US)
 
@@ -302,7 +301,11 @@ class LoanDetailViewModel @Inject constructor(
                 val csvContent = buildString {
                     append("Date,Amount,Principal,Interest,Account,Notes\n")
                     rawPayments.forEach { p ->
-                        val displayDate = runCatching { sdfOut.format(sdfIn.parse(p.paymentDate)!!) }.getOrDefault(p.paymentDate)
+                        val displayDate = try {
+                            sdfOut.format(sdfIn.parse(p.paymentDate)!!)
+                        } catch (e: Exception) {
+                            p.paymentDate
+                        }
                         val accName = rawAccounts.find { it.id == p.accountId }?.name ?: "Unknown"
                         append("\"$displayDate\",\"${p.amount}\",\"${p.principalPaid}\",\"${p.interestPaid}\",\"$accName\",\"${p.notes.replace("\"", "\"\"")}\"\n")
                     }
@@ -332,4 +335,4 @@ class LoanDetailViewModel @Inject constructor(
     private fun emitEvent(event: LoanDetailEvent) {
         viewModelScope.launch { _events.emit(event) }
     }
-}LoanDetailScreen.kt
+}

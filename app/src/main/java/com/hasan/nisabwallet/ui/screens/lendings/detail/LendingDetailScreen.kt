@@ -8,11 +8,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,7 +32,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -165,12 +169,12 @@ fun LendingDetailScreen(
                             Text("${status.percentagePaid}% Repaid", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                         }
                         LinearProgressIndicator(progress = { (status.percentagePaid / 100f).toFloat() }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(12.dp).clip(RoundedCornerShape(6.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
-                        
+
                         Spacer(Modifier.height(16.dp))
                         FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             InfoBox(Icons.Default.AttachMoney, "Principal", fmt(lending.principalAmount), Color(0xFF2563EB), Color(0xFFEFF6FF), Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             InfoBox(Icons.Default.CheckCircle, "Repaid", fmt(lending.totalRepaid), Color(0xFF16A34A), Color(0xFFF0FDF4), Modifier.weight(1f, false).fillMaxWidth(0.45f))
-                            InfoBox(Icons.Default.TrendingUp, "Remaining", fmt(status.remainingBalance), Color(0xFFDC2626), Color(0xFFFEF2F2), Modifier.weight(1f, false).fillMaxWidth(0.45f))
+                            InfoBox(Icons.AutoMirrored.Filled.TrendingUp, "Remaining", fmt(status.remainingBalance), Color(0xFFDC2626), Color(0xFFFEF2F2), Modifier.weight(1f, false).fillMaxWidth(0.45f))
                             InfoBox(Icons.Default.Schedule, "Payments", "${lending.paymentsReceived}${if(lending.totalInstallments!=null) " / ${lending.totalInstallments}" else ""}", Color(0xFF9333EA), Color(0xFFFAF5FF), Modifier.weight(1f, false).fillMaxWidth(0.45f))
                         }
                     }
@@ -205,7 +209,7 @@ fun LendingDetailScreen(
                     ) {
                         Column(Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                                Icon(Icons.Default.Article, null, tint = Color(0xFF111827), modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Filled.Article, null, tint = Color(0xFF111827), modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Lending Details", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             }
@@ -253,7 +257,7 @@ fun LendingDetailScreen(
                         }
                     }
 
-                    // Statistics[cite: 14]
+                    // Statistics
                     Card(
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))
@@ -263,8 +267,8 @@ fun LendingDetailScreen(
                             TextRow("Total Payments Received", status.totalPayments.toString())
                             TextRow("Expected Payments", status.expectedPayments.toString())
                             TextRow("Payments On Time", status.paymentsOnTime.toString(), valColor = Color(0xFF16A34A))
-                            TextRow("Payments Missed", lending.paymentsMissed.toString(), valColor = Color(0xFFDC2626))
-                            TextRow("On-Time Rate", "${String.format("%.0f", status.paymentRate)}%")
+                            TextRow("Payments Missed", "0", valColor = Color(0xFFDC2626)) // Set to static 0 as it's not tracked
+                            TextRow("On-Time Rate", String.format(Locale.US, "%.0f%%", status.paymentRate))
                             TextRow("Reminders Sent", state.reminders.size.toString(), isLast = true)
                         }
                     }
@@ -292,7 +296,7 @@ fun LendingDetailScreen(
                                 }
                             }
                         }
-                        
+
                         Spacer(Modifier.height(16.dp))
 
                         if (state.payments.isEmpty()) {
@@ -328,7 +332,7 @@ fun LendingDetailScreen(
                 }
             }
 
-            // Reminder History[cite: 14]
+            // Reminder History
             if (state.reminders.isNotEmpty()) {
                 item {
                     Card(
@@ -337,7 +341,7 @@ fun LendingDetailScreen(
                     ) {
                         Column(Modifier.padding(20.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-                                Icon(Icons.Default.Send, null, tint = Color(0xFF111827), modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color(0xFF111827), modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Reminder History", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             }
@@ -345,7 +349,7 @@ fun LendingDetailScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 state.reminders.forEach { r ->
                                     Row(Modifier.fillMaxWidth().background(Color(0xFFEFF6FF), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
-                                        Icon(Icons.Default.Send, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                                        Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp).padding(top = 2.dp))
                                         Spacer(Modifier.width(12.dp))
                                         Column {
                                             Text("Reminder sent to ${r.borrowerContact}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -361,7 +365,7 @@ fun LendingDetailScreen(
                     }
                 }
             }
-            
+
             item { Spacer(Modifier.height(40.dp)) }
         }
     }
@@ -412,9 +416,9 @@ private fun TextRow(label: String, value: String, valColor: Color = Color(0xFF11
 
 private fun formatDisplayDate(dateStr: String): String {
     if (dateStr.isBlank()) return "N/A"
-    return runCatching {
+    return try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val out = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+        val out = SimpleDateFormat("dd MMM, yyyy", Locale.US)
         out.format(sdf.parse(dateStr)!!)
-    }.getOrDefault(dateStr)
+    } catch (e: Exception) { dateStr }
 }

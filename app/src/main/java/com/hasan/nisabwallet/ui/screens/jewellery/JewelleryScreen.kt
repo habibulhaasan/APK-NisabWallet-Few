@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -22,7 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -33,7 +34,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import kotlin.math.abs
+import kotlin.math.floor
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +63,7 @@ fun JewelleryScreen(
         containerColor = Color(0xFFF9FAFB)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
@@ -73,7 +78,9 @@ fun JewelleryScreen(
                     ) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp).padding(end = 8.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF111827)) }
+                                IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp).padding(end = 8.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color(0xFF111827))
+                                }
                                 Icon(Icons.Default.Diamond, null, tint = Color(0xFFF59E0B), modifier = Modifier.size(24.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Jewellery Tracker", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -237,7 +244,7 @@ private fun JewelleryCard(
 ) {
     val isGold = item.metal == "Gold"
     val isSold = item.status == "sold"
-    
+
     val badgeBg = if(isGold) Color(0xFFFEF3C7) else Color(0xFFF1F5F9)
     val badgeText = if(isGold) Color(0xFF92400E) else Color(0xFF1E293B)
     val iconBg = if(isSold) Color(0xFFF3F4F6) else if(isGold) Color(0xFFFFFBEB) else Color(0xFFF8FAFC)
@@ -279,7 +286,7 @@ private fun JewelleryCard(
                         Icon(Icons.Default.Scale, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(formatWeightLong(item), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
-                        Text(" • ${String.format("%.4f", item.weightGrams)}g", fontSize = 11.sp, color = Color(0xFF9CA3AF))
+                        Text(String.format(Locale.US, " • %.4fg", item.weightGrams), fontSize = 11.sp, color = Color(0xFF9CA3AF))
                     }
 
                     if (!isSold) {
@@ -304,7 +311,7 @@ private fun JewelleryCard(
                             val profit = (item.soldPrice ?: 0.0) - item.purchaseTotal
                             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(if(profit >= 0) "📈 Profit: " else "📉 Loss: ", fontSize = 10.sp, color = Color(0xFF6B7280))
-                                Text(fmt(Math.abs(profit)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(profit >= 0) Color(0xFF059669) else Color(0xFFDC2626))
+                                Text(fmt(abs(profit)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(profit >= 0) Color(0xFF059669) else Color(0xFFDC2626))
                             }
                         }
                     }
@@ -312,16 +319,22 @@ private fun JewelleryCard(
 
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (!isSold) {
-                        IconButton(onClick = onSell, modifier = Modifier.size(32.dp).background(Color(0xFFEFF6FF), RoundedCornerShape(8.dp))) { Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
+                        IconButton(onClick = onSell, modifier = Modifier.size(32.dp).background(Color(0xFFEFF6FF), RoundedCornerShape(8.dp))) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowRight, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                        }
                     }
-                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))) { Icon(Icons.Default.Edit, null, tint = Color(0xFF4B5563), modifier = Modifier.size(14.dp)) }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp).background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp))) { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp)) }
+                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))) {
+                        Icon(Icons.Default.Edit, null, tint = Color(0xFF4B5563), modifier = Modifier.size(14.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp).background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp))) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
+                    }
                 }
             }
 
             if (item.notes.isNotBlank() || item.soldNotes?.isNotBlank() == true) {
                 HorizontalDivider(color = Color(0xFFF3F4F6))
-                Text("📝 ${item.soldNotes?.takeIf { it.isNotBlank() } ?: item.notes}", fontSize = 10.sp, color = Color(0xFF9CA3AF), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                Text("📝 ${item.soldNotes?.takeIf { it.isNotBlank() } ?: item.notes}", fontSize = 10.sp, color = Color(0xFF9CA3AF), fontStyle = FontStyle.Italic, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
         }
     }
@@ -332,7 +345,8 @@ private fun JewelleryCard(
 private fun AddEditJewelleryModal(
     form: JewelleryForm, accounts: List<JewelleryAccount>, isSaving: Boolean,
     calcGrams: (Int, Int, Int, Int) -> Double,
-    onUpdateForm: (JewelleryForm) -> Unit, onDismiss: () -> Unit, onSave: () -> Unit
+    onUpdateForm: ((JewelleryForm) -> JewelleryForm) -> Unit,
+    onDismiss: () -> Unit, onSave: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), containerColor = Color.White) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f)) {
@@ -343,19 +357,21 @@ private fun AddEditJewelleryModal(
             HorizontalDivider()
 
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                
+
                 // Basic Info
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Basic Info", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                    OutlinedTextField(value = form.name, onValueChange = { onUpdateForm(form.copy(name = it)) }, label = { Text("Item Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true)
-                    
+                    OutlinedTextField(value = form.name, onValueChange = { n -> onUpdateForm { it.copy(name = n) } }, label = { Text("Item Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true)
+
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         var catExpanded by remember { mutableStateOf(false) }
                         Box(Modifier.weight(1f)) {
                             OutlinedTextField(value = form.category, onValueChange = {}, readOnly = true, label = { Text("Category") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
                             Box(Modifier.matchParentSize().clickable { catExpanded = true })
                             DropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
-                                listOf("Necklace", "Ring", "Earring", "Bracelet", "Bangle", "Anklet", "Nose Ring", "Pendant", "Chain", "Other").forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { onUpdateForm(form.copy(category = t)); catExpanded = false }) }
+                                listOf("Necklace", "Ring", "Earring", "Bracelet", "Bangle", "Anklet", "Nose Ring", "Pendant", "Chain", "Other").forEach { t ->
+                                    DropdownMenuItem(text = { Text(t) }, onClick = { onUpdateForm { it.copy(category = t) }; catExpanded = false })
+                                }
                             }
                         }
                         var metalExpanded by remember { mutableStateOf(false) }
@@ -363,7 +379,9 @@ private fun AddEditJewelleryModal(
                             OutlinedTextField(value = form.metal, onValueChange = {}, readOnly = true, label = { Text("Metal") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
                             Box(Modifier.matchParentSize().clickable { metalExpanded = true })
                             DropdownMenu(expanded = metalExpanded, onDismissRequest = { metalExpanded = false }) {
-                                listOf("Gold", "Silver").forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { onUpdateForm(form.copy(metal = t, karat = "22K")); metalExpanded = false }) }
+                                listOf("Gold", "Silver").forEach { t ->
+                                    DropdownMenuItem(text = { Text(t) }, onClick = { onUpdateForm { it.copy(metal = t, karat = "22K") }; metalExpanded = false })
+                                }
                             }
                         }
                     }
@@ -374,13 +392,13 @@ private fun AddEditJewelleryModal(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         karats.forEach { k ->
                             val sel = form.karat == k
-                            Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).border(2.dp, if(sel) Color(0xFFF59E0B) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(sel) Color(0xFFF59E0B) else Color.White).clickable { onUpdateForm(form.copy(karat = k)) }.padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).border(2.dp, if(sel) Color(0xFFF59E0B) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(sel) Color(0xFFF59E0B) else Color.White).clickable { onUpdateForm { it.copy(karat = k) } }.padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
                                 Text(k, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if(sel) Color.White else Color(0xFF4B5563))
                             }
                         }
                     }
 
-                    OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 2)
+                    OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 2)
                 }
 
                 // Acquisition
@@ -389,7 +407,7 @@ private fun AddEditJewelleryModal(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("purchased" to "Purchased", "gift" to "Gift", "inherited" to "Inherited", "other" to "Other").forEach { (v, l) ->
                             val sel = form.acquisitionType == v
-                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(sel) Color(0xFFA855F7) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(sel) Color(0xFFFAF5FF) else Color.White).clickable { onUpdateForm(form.copy(acquisitionType = v, recordTransaction = false)) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(sel) Color(0xFFA855F7) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(sel) Color(0xFFFAF5FF) else Color.White).clickable { onUpdateForm { it.copy(acquisitionType = v, recordTransaction = false) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text(l, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(sel) Color(0xFF7E22CE) else Color(0xFF6B7280))
                             }
                         }
@@ -403,16 +421,16 @@ private fun AddEditJewelleryModal(
                         Text("1 Vori = 16 Ana = 96 Roti = 960 Point = 11.664g. Enter what you know — leave others at 0.", fontSize = 10.sp, color = Color(0xFF1D4ED8), modifier = Modifier.padding(8.dp))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        WeightInput("Vori", form.weightVori, { onUpdateForm(form.copy(weightVori = it)) }, Modifier.weight(1f))
-                        WeightInput("Ana", form.weightAna, { onUpdateForm(form.copy(weightAna = it)) }, Modifier.weight(1f))
-                        WeightInput("Roti", form.weightRoti, { onUpdateForm(form.copy(weightRoti = it)) }, Modifier.weight(1f))
-                        WeightInput("Point", form.weightPoint, { onUpdateForm(form.copy(weightPoint = it)) }, Modifier.weight(1f))
+                        WeightInput("Vori", form.weightVori, { v -> onUpdateForm { it.copy(weightVori = v) } }, Modifier.weight(1f))
+                        WeightInput("Ana", form.weightAna, { v -> onUpdateForm { it.copy(weightAna = v) } }, Modifier.weight(1f))
+                        WeightInput("Roti", form.weightRoti, { v -> onUpdateForm { it.copy(weightRoti = v) } }, Modifier.weight(1f))
+                        WeightInput("Point", form.weightPoint, { v -> onUpdateForm { it.copy(weightPoint = v) } }, Modifier.weight(1f))
                     }
                     val g = calcGrams(form.weightVori.toIntOrNull()?:0, form.weightAna.toIntOrNull()?:0, form.weightRoti.toIntOrNull()?:0, form.weightPoint.toIntOrNull()?:0)
                     if (g > 0) {
                         Row(Modifier.fillMaxWidth().background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Total weight", fontSize = 12.sp, color = Color(0xFF4B5563))
-                            Text("${String.format("%.4f", g)} grams", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                            Text(String.format(Locale.US, "%.4f grams", g), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                         }
                     }
                 }
@@ -421,27 +439,27 @@ private fun AddEditJewelleryModal(
                 if (form.acquisitionType == "purchased") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Purchase Price (optional)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                        DateSelectionField("Purchase Date", form.purchaseDate, { onUpdateForm(form.copy(purchaseDate = it)) })
-                        
+                        DateSelectionField("Purchase Date", form.purchaseDate, { d -> onUpdateForm { it.copy(purchaseDate = d) } })
+
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(!form.usePurchaseManual) Color(0xFF111827) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(!form.usePurchaseManual) Color(0xFF111827) else Color.White).clickable { onUpdateForm(form.copy(usePurchaseManual = false)) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(!form.usePurchaseManual) Color(0xFF111827) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(!form.usePurchaseManual) Color(0xFF111827) else Color.White).clickable { onUpdateForm { it.copy(usePurchaseManual = false) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text("Auto Calculate", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(!form.usePurchaseManual) Color.White else Color(0xFF6B7280))
                             }
-                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(form.usePurchaseManual) Color(0xFF111827) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(form.usePurchaseManual) Color(0xFF111827) else Color.White).clickable { onUpdateForm(form.copy(usePurchaseManual = true)) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).border(2.dp, if(form.usePurchaseManual) Color(0xFF111827) else Color(0xFFE5E7EB), RoundedCornerShape(8.dp)).background(if(form.usePurchaseManual) Color(0xFF111827) else Color.White).clickable { onUpdateForm { it.copy(usePurchaseManual = true) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                                 Text("Enter Total Directly", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(form.usePurchaseManual) Color.White else Color(0xFF6B7280))
                             }
                         }
 
                         if (form.usePurchaseManual) {
-                            OutlinedTextField(value = form.purchaseTotal, onValueChange = { onUpdateForm(form.copy(purchaseTotal = it)) }, label = { Text("Total Amount Paid (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                            OutlinedTextField(value = form.purchaseTotal, onValueChange = { v -> onUpdateForm { it.copy(purchaseTotal = v) } }, label = { Text("Total Amount Paid (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                         } else {
-                            OutlinedTextField(value = form.purchaseGoldPrice, onValueChange = { onUpdateForm(form.copy(purchaseGoldPrice = it)) }, label = { Text("Price Per Gram at Purchase (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                            OutlinedTextField(value = form.purchaseGoldPrice, onValueChange = { v -> onUpdateForm { it.copy(purchaseGoldPrice = v) } }, label = { Text("Price Per Gram at Purchase (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(value = form.purchaseVat, onValueChange = { onUpdateForm(form.copy(purchaseVat = it)) }, label = { Text("VAT (%)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                OutlinedTextField(value = form.purchaseMaking, onValueChange = { onUpdateForm(form.copy(purchaseMaking = it)) }, label = { Text("Making (%)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                OutlinedTextField(value = form.purchaseOther, onValueChange = { onUpdateForm(form.copy(purchaseOther = it)) }, label = { Text("Other (৳)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.purchaseVat, onValueChange = { v -> onUpdateForm { it.copy(purchaseVat = v) } }, label = { Text("VAT (%)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.purchaseMaking, onValueChange = { v -> onUpdateForm { it.copy(purchaseMaking = v) } }, label = { Text("Making (%)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.purchaseOther, onValueChange = { v -> onUpdateForm { it.copy(purchaseOther = v) } }, label = { Text("Other (৳)") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             }
-                            
+
                             val g = calcGrams(form.weightVori.toIntOrNull()?:0, form.weightAna.toIntOrNull()?:0, form.weightRoti.toIntOrNull()?:0, form.weightPoint.toIntOrNull()?:0)
                             val bgP = form.purchaseGoldPrice.toDoubleOrNull() ?: 0.0
                             if (g > 0 && bgP > 0) {
@@ -453,16 +471,15 @@ private fun AddEditJewelleryModal(
                                 Surface(color = Color(0xFFECFDF5), border = BorderStroke(1.dp, Color(0xD1FAE5)), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                                     Column(Modifier.padding(12.dp)) {
                                         Text("Estimated Purchase Cost", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
-                                        Text("Total paid: ৳${String.format("%.0f", tot)}", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF047857), modifier = Modifier.padding(top = 4.dp))
+                                        Text(String.format(Locale.US, "Total paid: ৳%.0f", tot), fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF047857), modifier = Modifier.padding(top = 4.dp))
                                     }
                                 }
                             }
                         }
 
-                        // Expense Transaction System (Only for new purchases)[cite: 15]
                         if (form.id == null) {
                             Surface(
-                                modifier = Modifier.fillMaxWidth().clickable { onUpdateForm(form.copy(recordTransaction = !form.recordTransaction)) },
+                                modifier = Modifier.fillMaxWidth().clickable { onUpdateForm { it.copy(recordTransaction = !it.recordTransaction) } },
                                 shape = RoundedCornerShape(8.dp), border = BorderStroke(2.dp, if(form.recordTransaction) Color(0xFF34D399) else Color(0xFFE5E7EB)),
                                 color = if(form.recordTransaction) Color(0xFFECFDF5) else Color.White
                             ) {
@@ -483,14 +500,16 @@ private fun AddEditJewelleryModal(
                                     OutlinedTextField(value = accounts.find { it.id == form.txAccountId }?.name ?: "Select account", onValueChange = {}, readOnly = true, label = { Text("Deduct from account") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
                                     Box(Modifier.matchParentSize().clickable { txAccExpanded = true })
                                     DropdownMenu(expanded = txAccExpanded, onDismissRequest = { txAccExpanded = false }) {
-                                        accounts.forEach { a -> DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm(form.copy(txAccountId = a.id)); txAccExpanded = false }) }
+                                        accounts.forEach { a ->
+                                            DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm { it.copy(txAccountId = a.id) }; txAccExpanded = false })
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 } else {
-                    DateSelectionField("Date Acquired (optional)", form.purchaseDate, { onUpdateForm(form.copy(purchaseDate = it)) })
+                    DateSelectionField("Date Acquired (optional)", form.purchaseDate, { d -> onUpdateForm { it.copy(purchaseDate = d) } })
                     Text("No purchase cost recorded. Current market price will be used for Zakat calculation.", fontSize = 10.sp, color = Color(0xFF9CA3AF))
                 }
             }
@@ -499,7 +518,7 @@ private fun AddEditJewelleryModal(
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
                 Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))) {
-                    if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") } 
+                    if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") }
                     else Text(if(form.id != null) "Save Changes" else "Add Jewellery", fontWeight = FontWeight.Bold)
                 }
             }
@@ -524,7 +543,8 @@ private fun WeightInput(label: String, value: String, onValueChange: (String) ->
 @Composable
 private fun SellJewelleryModal(
     form: SellJewelleryForm, item: Jewellery, accounts: List<JewelleryAccount>, isSaving: Boolean,
-    onUpdateForm: (SellJewelleryForm) -> Unit, onDismiss: () -> Unit, onSave: () -> Unit
+    onUpdateForm: ((SellJewelleryForm) -> SellJewelleryForm) -> Unit,
+    onDismiss: () -> Unit, onSave: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), containerColor = Color.White) {
         Column(Modifier.fillMaxWidth().padding(bottom = 36.dp)) {
@@ -541,27 +561,29 @@ private fun SellJewelleryModal(
                             Text(item.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
                             Text("${item.karat} ${item.metal}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
                         }
-                        Text("${formatWeightLong(item)} (${String.format("%.4f", item.weightGrams)}g)", fontSize = 11.sp, color = Color(0xFF92400E), modifier = Modifier.padding(top = 4.dp))
+                        Text("${formatWeightLong(item)} (${String.format(Locale.US, "%.4f", item.weightGrams)}g)", fontSize = 11.sp, color = Color(0xFF92400E), modifier = Modifier.padding(top = 4.dp))
                     }
                 }
 
                 OutlinedTextField(
-                    value = form.saleAmount, onValueChange = { onUpdateForm(form.copy(saleAmount = it)) },
+                    value = form.saleAmount, onValueChange = { v -> onUpdateForm { it.copy(saleAmount = v) } },
                     label = { Text("Sale Amount (৳) *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
                 )
 
-                DateSelectionField("Sale Date", form.saleDate, { onUpdateForm(form.copy(saleDate = it)) })
+                DateSelectionField("Sale Date", form.saleDate, { d -> onUpdateForm { it.copy(saleDate = d) } })
 
                 var accExpanded by remember { mutableStateOf(false) }
                 Box {
                     OutlinedTextField(value = accounts.find { it.id == form.accountId }?.name ?: "Select account", onValueChange = {}, readOnly = true, label = { Text("Add money to account *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
                     Box(Modifier.matchParentSize().clickable { accExpanded = true })
                     DropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false }) {
-                        accounts.forEach { a -> DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm(form.copy(accountId = a.id)); accExpanded = false }) }
+                        accounts.forEach { a ->
+                            DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm { it.copy(accountId = a.id) }; accExpanded = false })
+                        }
                     }
                 }
 
-                OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 2)
+                OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 2)
 
                 Surface(color = Color(0xFFFFF7ED), border = BorderStroke(1.dp, Color(0xFFFED7AA)), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
@@ -574,7 +596,7 @@ private fun SellJewelleryModal(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
                     Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
-                        if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") } 
+                        if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") }
                         else Text("Confirm Sale", fontWeight = FontWeight.Bold)
                     }
                 }
@@ -589,7 +611,10 @@ private fun SellJewelleryModal(
 private fun DateSelectionField(label: String, dateString: String, onDateSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = runCatching { val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }; sdf.parse(dateString)?.time }.getOrNull()
+        initialSelectedDateMillis = try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            sdf.parse(dateString)?.time
+        } catch(e: Exception) { null }
     )
 
     Box(modifier = modifier) {
@@ -608,14 +633,14 @@ private fun DateSelectionField(label: String, dateString: String, onDateSelected
 
 private fun formatWeightString(grams: Double): String {
     if (grams <= 0) return "0g"
-    val vori = Math.floor(grams / 11.664).toInt()
+    val vori = floor(grams / 11.664).toInt()
     val rem = grams - (vori * 11.664)
-    val ana = Math.floor(rem / (11.664 / 16)).toInt()
+    val ana = floor(rem / (11.664 / 16)).toInt()
     val parts = mutableListOf<String>()
     if (vori > 0) parts.add("${vori}V")
     if (ana > 0) parts.add("${ana}A")
-    if (parts.isEmpty()) return "${String.format("%.2f", grams)}g"
-    return parts.joinToString(" ") + " (${String.format("%.2f", grams)}g)"
+    if (parts.isEmpty()) return "${String.format(Locale.US, "%.2f", grams)}g"
+    return parts.joinToString(" ") + " (${String.format(Locale.US, "%.2f", grams)}g)"
 }
 
 private fun formatWeightLong(item: Jewellery): String {
@@ -629,9 +654,9 @@ private fun formatWeightLong(item: Jewellery): String {
 
 private fun formatDisplayDate(dateStr: String): String {
     if (dateStr.isBlank()) return "—"
-    return runCatching {
+    return try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val out = SimpleDateFormat("dd MMM, yyyy", Locale.US)
         out.format(sdf.parse(dateStr)!!)
-    }.getOrDefault(dateStr)
+    } catch (e: Exception) { dateStr }
 }
