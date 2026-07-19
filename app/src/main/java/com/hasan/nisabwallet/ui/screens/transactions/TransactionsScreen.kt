@@ -1,15 +1,20 @@
 package com.hasan.nisabwallet.ui.screens.transactions
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
@@ -204,7 +209,7 @@ private fun TopActionBar(
                 }
             }
         }
-        
+
         Spacer(Modifier.height(12.dp))
 
         Row(
@@ -376,15 +381,15 @@ private fun TransactionList(
     onTap: (Transaction) -> Unit,
     fmt: (Double) -> String,
 ) {
-    val grouped = remember(transactions) { 
-        transactions.groupBy { it.date }.entries.sortedByDescending { it.key } 
+    val grouped = remember(transactions) {
+        transactions.groupBy { it.date }.entries.sortedByDescending { it.key }
     }
-    
+
     val displayDates = remember(grouped) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val display = SimpleDateFormat("dd MMM yyyy", Locale.US)
-        grouped.associate { 
-            it.key to runCatching { display.format(sdf.parse(it.key)!!) }.getOrDefault(it.key) 
+        grouped.associate {
+            it.key to runCatching { display.format(sdf.parse(it.key)!!) }.getOrDefault(it.key)
         }
     }
 
@@ -395,13 +400,29 @@ private fun TransactionList(
     ) {
         grouped.forEach { (date, txs) ->
             item(key = "header-$date") {
-                Text(
-                    text     = displayDates[date] ?: date,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
+                val dailyInc = txs.filter { !it.isTransfer && it.type == "Income" }.sumOf { it.amount }
+                val dailyExp = txs.filter { !it.isTransfer && it.type == "Expense" }.sumOf { it.amount }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text     = displayDates[date] ?: date,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (dailyInc > 0) {
+                            Text("In: ${fmt(dailyInc)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF16A34A))
+                        }
+                        if (dailyExp > 0) {
+                            Text("Out: ${fmt(dailyExp)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFDC2626))
+                        }
+                    }
+                }
             }
             items(txs, key = { it.id }) { tx ->
                 TransactionListItem(
@@ -519,7 +540,7 @@ private fun TransactionDetailSheet(
 ) {
     val accentColor = if (transaction.isTransfer) Color(0xFF2563EB) else if (transaction.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
     val sign        = if (transaction.isTransfer) "" else if (transaction.type == "Income") "+" else "−"
-    
+
     val dateLabel = remember(transaction.date) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val display = SimpleDateFormat("d MMMM yyyy", Locale.US)
@@ -558,7 +579,7 @@ private fun TransactionDetailSheet(
 
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 DetailRow("Type",     if (transaction.isTransfer) "Transfer" else transaction.type)
-                
+
                 if (transaction.isTransfer) {
                     if (transaction.type == "Income") {
                         DetailRow("To Account", getAccountName(transaction.accountId))
@@ -574,7 +595,7 @@ private fun TransactionDetailSheet(
                     DetailRow("Category", getCategoryName(transaction.categoryId))
                     DetailRow("Account",  getAccountName(transaction.accountId))
                 }
-                
+
                 DetailRow("Date",     dateLabel)
                 if (transaction.chargeAmount > 0) DetailRow("Charges", "${fmt(transaction.chargeAmount)}${if (transaction.chargeNote.isNotBlank()) " (${transaction.chargeNote})" else ""}", Color(0xFFF97316))
                 if (transaction.isRiba)     DetailRow("⚠ Riba Flag", "This is interest income", Color(0xFFD97706))
@@ -626,9 +647,9 @@ private fun DetailRow(label: String, value: String, valueColor: Color = Color.Un
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
-// ─── Add / Edit Transaction Sheet ─────────────────────────────────────────────
+// ─── Modern Drill-Down Add/Edit Sheet ────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddEditTransactionSheet(
     editing: Transaction?,
@@ -652,7 +673,7 @@ private fun AddEditTransactionSheet(
                         toAccountId = if (isFrom) editing.relatedAccountId ?: "" else editing.accountId,
                         description = editing.originalDescription ?: "",
                         date = editing.date,
-                        chargeAmount = "", 
+                        chargeAmount = "",
                         chargeNote = "",
                     )
                 } else {
@@ -676,192 +697,343 @@ private fun AddEditTransactionSheet(
     val accentColor = if (isTransfer) Color(0xFF2563EB) else if (isIncome) Color(0xFF16A34A) else Color(0xFFDC2626)
     val filteredCats = categories.filter { it.type == form.type }
 
-    var showInlineCatForm by remember { mutableStateOf(false) }
-    var inlineCatName     by remember { mutableStateOf("") }
-    var inlineCatColor    by remember { mutableStateOf(if (isIncome) "#10B981" else "#EF4444") }
+    // State machine for Drill-Down Navigation
+    var currentView by remember { mutableStateOf("form") }
+
+    // Sub-sheet states
+    var inlineCatName  by remember { mutableStateOf("") }
+    var inlineCatColor by remember { mutableStateOf(if (isIncome) "#10B981" else "#EF4444") }
     val colorOptions = listOf("#EF4444","#F59E0B","#10B981","#3B82F6","#6366F1","#8B5CF6","#EC4899","#06B6D4","#84CC16","#F97316")
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-                .padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text(
-                text       = if (editing != null) "Edit Record" else "Add Record",
-                fontSize   = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color      = MaterialTheme.colorScheme.onSurface,
-            )
+        Crossfade(targetState = currentView, label = "SheetNavigation") { view ->
+            when (view) {
+                "form" -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.85f)
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .padding(bottom = 36.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Text(
+                            text       = if (editing != null) "Edit Record" else "Add Record",
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = MaterialTheme.colorScheme.onSurface,
+                        )
 
-            // Tabs
-            if (editing == null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    listOf("Income", "Expense", "Transfer").forEach { type ->
-                        val sel = form.type == type
-                        val bg  = when { 
-                            sel && type == "Income" -> Color(0xFF16A34A)
-                            sel && type == "Transfer" -> Color(0xFF2563EB)
-                            sel -> Color(0xFFDC2626)
-                            else -> Color.Transparent 
+                        // Segmented Type Control
+                        if (editing == null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                listOf("Income", "Expense", "Transfer").forEach { type ->
+                                    val sel = form.type == type
+                                    val bg  = when {
+                                        sel && type == "Income" -> Color(0xFF16A34A)
+                                        sel && type == "Transfer" -> Color(0xFF2563EB)
+                                        sel -> Color(0xFFDC2626)
+                                        else -> Color.Transparent
+                                    }
+                                    Box(
+                                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable {
+                                            form = form.copy(type = type, categoryId = "")
+                                        }.padding(vertical = 12.dp),
+                                        contentAlignment  = Alignment.Center,
+                                    ) {
+                                        Text(type, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
                         }
-                        Box(
-                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(bg).clickable { 
-                                form = form.copy(type = type, categoryId = "") 
-                            }.padding(vertical = 12.dp),
-                            contentAlignment  = Alignment.Center,
+
+                        // Amount Field
+                        OutlinedTextField(
+                            value         = form.amount,
+                            onValueChange = { form = form.copy(amount = it) },
+                            label         = { Text("Amount (৳)") },
+                            modifier      = Modifier.fillMaxWidth(),
+                            shape         = RoundedCornerShape(12.dp),
+                            singleLine    = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            textStyle     = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        )
+
+                        // Drill-Down Selection Fields
+                        Column(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
                         ) {
-                            Text(type, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (isTransfer) {
+                                DrillDownRow(
+                                    label = "From Account",
+                                    value = accounts.find { it.id == form.accountId }?.name ?: "Select source",
+                                    icon = Icons.Default.AccountBalanceWallet,
+                                    onClick = { currentView = "selectAccount" }
+                                )
+                                HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(start = 44.dp))
+                                DrillDownRow(
+                                    label = "To Account",
+                                    value = accounts.find { it.id == form.toAccountId }?.name ?: "Select destination",
+                                    icon = Icons.Default.AccountBalance,
+                                    onClick = { currentView = "selectToAccount" }
+                                )
+                            } else {
+                                DrillDownRow(
+                                    label = "Account",
+                                    value = accounts.find { it.id == form.accountId }?.name ?: "Select account",
+                                    icon = Icons.Default.AccountBalanceWallet,
+                                    onClick = { currentView = "selectAccount" }
+                                )
+                                HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(start = 44.dp))
+                                DrillDownRow(
+                                    label = "Category",
+                                    value = filteredCats.find { it.id == form.categoryId }?.name ?: "Select category",
+                                    icon = Icons.Default.Category,
+                                    onClick = { currentView = "selectCategory" }
+                                )
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value         = form.description,
+                            onValueChange = { form = form.copy(description = it) },
+                            label         = { Text("Note (optional)") },
+                            modifier      = Modifier.fillMaxWidth(),
+                            shape         = RoundedCornerShape(12.dp),
+                            maxLines      = 2,
+                        )
+
+                        DateSelectionField(
+                            label = "Date",
+                            dateString = form.date,
+                            onDateSelected = { form = form.copy(date = it) }
+                        )
+
+                        ChargesSection(
+                            chargeAmount = form.chargeAmount,
+                            chargeNote   = form.chargeNote,
+                            onAmountChange = { form = form.copy(chargeAmount = it) },
+                            onNoteChange   = { form = form.copy(chargeNote = it) },
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        Button(
+                            onClick   = { onSave(form) },
+                            enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && (if (isTransfer) form.toAccountId.isNotBlank() else form.categoryId.isNotBlank()),
+                            modifier  = Modifier.fillMaxWidth().height(52.dp),
+                            shape     = RoundedCornerShape(12.dp),
+                            colors    = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Saving…", fontSize = 15.sp)
+                            } else {
+                                Text(if (editing != null) "Update Record" else "Add Record", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
-            }
 
-            OutlinedTextField(
-                value         = form.amount,
-                onValueChange = { form = form.copy(amount = it) },
-                label         = { Text("Amount (৳)") },
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(10.dp),
-                singleLine    = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-            )
+                "selectAccount", "selectToAccount" -> {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                        SubSheetHeader(title = "Select Account", onBack = { currentView = "form" })
 
-            if (isTransfer) {
-                LabeledDropdown(
-                    label   = "From Account",
-                    value   = accounts.find { it.id == form.accountId }?.let { "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" } ?: "Select Source Account",
-                    options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
-                    onSelect= { form = form.copy(accountId = it) },
-                )
-                
-                LabeledDropdown(
-                    label   = "To Account",
-                    value   = accounts.find { it.id == form.toAccountId }?.name ?: "Select Destination Account",
-                    options = accounts.filter { it.id != form.accountId }.map { it.id to it.name },
-                    onSelect= { form = form.copy(toAccountId = it) },
-                )
-            } else {
-                LabeledDropdown(
-                    label   = "Account",
-                    value   = accounts.find { it.id == form.accountId }?.let { "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" } ?: "Select Account",
-                    options = accounts.map { it.id to "${it.name} — ${CurrencyFormatter.formatBDT(it.balance)}" },
-                    onSelect= { form = form.copy(accountId = it) },
-                )
+                        // Alphabetical Sort with "Cash" pinned to the top
+                        val sortedAccounts = remember(accounts) {
+                            accounts.sortedWith(compareBy({ !it.name.contains("Cash", ignoreCase = true) }, { it.name }))
+                        }
 
-                Column {
-                    LabeledDropdown(
-                        label    = "Category",
-                        value    = filteredCats.find { it.id == form.categoryId }?.name ?: "Select Category",
-                        options  = filteredCats.map { it.id to "${it.name}${if (it.isRiba) " ⚠" else ""}" } + listOf("__add_new__" to "➕ Add new category…"),
-                        onSelect = {
-                            if (it == "__add_new__") {
-                                inlineCatName = ""
-                                showInlineCatForm = true
-                            } else {
-                                form = form.copy(categoryId = it)
-                                showInlineCatForm = false
+                        LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(sortedAccounts) { acc ->
+                                val isSelected = if (view == "selectAccount") form.accountId == acc.id else form.toAccountId == acc.id
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        if (view == "selectAccount") form = form.copy(accountId = acc.id)
+                                        else form = form.copy(toAccountId = acc.id)
+                                        currentView = "form"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = if (isSelected) Color(0xFFEFF6FF) else Color(0xFFF9FAFB)),
+                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF3B82F6) else Color(0xFFE5E7EB))
+                                ) {
+                                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(modifier = Modifier.size(40.dp).background(Color(0xFFDBEAFE), CircleShape), contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF1D4ED8))
+                                        }
+                                        Spacer(Modifier.width(16.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(acc.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                            Text("Balance: ${CurrencyFormatter.formatBDT(acc.balance)}", fontSize = 13.sp, color = Color(0xFF6B7280))
+                                        }
+                                        if (isSelected) {
+                                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF3B82F6))
+                                        }
+                                    }
+                                }
                             }
-                        },
-                    )
+                        }
+                    }
+                }
 
-                    AnimatedVisibility(visible = showInlineCatForm) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            shape    = RoundedCornerShape(10.dp),
-                            colors   = CardDefaults.cardColors(containerColor = if (isIncome) Color(0xFFF0FDF4) else Color(0xFFFFF1F2)),
-                            border   = BorderStroke(1.dp, if (isIncome) Color(0xFF86EFAC) else Color(0xFFFCA5A5)),
+                "selectCategory" -> {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                        SubSheetHeader(title = "Select Category", onBack = { currentView = "form" })
+
+                        // Alphabetically sorted 2-Column Grid
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth().weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("New ${form.type} Category", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.8.sp)
-                                OutlinedTextField(
-                                    value         = inlineCatName,
-                                    onValueChange = { inlineCatName = it },
-                                    placeholder   = { Text("Category name…", fontSize = 13.sp) },
-                                    singleLine    = true,
-                                    modifier      = Modifier.fillMaxWidth(),
-                                    shape         = RoundedCornerShape(8.dp),
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    colorOptions.forEach { hex ->
-                                        val c = runCatching { Color(hex.toColorInt()) }.getOrDefault(Color.Gray)
-                                        Box(
-                                            modifier = Modifier.size(24.dp)
-                                                .background(c, CircleShape)
-                                                .then(if (inlineCatColor == hex) Modifier.border(2.dp, Color.Black, CircleShape) else Modifier)
-                                                .clickable { inlineCatColor = hex }
+                            items(filteredCats.sortedBy { it.name }) { cat ->
+                                val catColor = runCatching { Color(android.graphics.Color.parseColor(cat.color)) }.getOrDefault(Color.Gray)
+                                val isSelected = form.categoryId == cat.id
+
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        form = form.copy(categoryId = cat.id)
+                                        currentView = "form"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = if (isSelected) catColor.copy(alpha = 0.1f) else Color.White),
+                                    border = BorderStroke(1.dp, if (isSelected) catColor else Color(0xFFE5E7EB))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(modifier = Modifier.size(14.dp).background(catColor, CircleShape))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(
+                                            text = cat.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = Color(0xFF111827),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(modifier = Modifier.weight(1f), onClick = { showInlineCatForm = false }) { Text("Cancel", fontSize = 13.sp) }
-                                    Button(
-                                        modifier = Modifier.weight(1f),
-                                        onClick  = {
-                                            if (inlineCatName.isNotBlank()) {
-                                                onAddCategory(inlineCatName, form.type, inlineCatColor) { newCat ->
-                                                    form = form.copy(categoryId = newCat.id)
-                                                    showInlineCatForm = false
-                                                }
-                                            }
-                                        },
-                                        colors   = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                    ) { Text("Save", fontSize = 13.sp) }
+                            }
+
+                            // Add New Category Card
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().clickable { currentView = "createCategory" },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
+                                    border = BorderStroke(1.dp, Color(0xFFD1D5DB))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(
+                                            text = "New Category",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF6B7280)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            OutlinedTextField(
-                value         = form.description,
-                onValueChange = { form = form.copy(description = it) },
-                label         = { Text("Note (optional)") },
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(10.dp),
-                maxLines      = 2,
-            )
+                "createCategory" -> {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                        SubSheetHeader(title = "New Category", onBack = { currentView = "selectCategory" })
 
-            // Date Picker Field
-            DateSelectionField(
-                label = "Date (yyyy-MM-dd)",
-                dateString = form.date,
-                onDateSelected = { form = form.copy(date = it) }
-            )
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            OutlinedTextField(
+                                value         = inlineCatName,
+                                onValueChange = { inlineCatName = it },
+                                label         = { Text("Category Name") },
+                                singleLine    = true,
+                                modifier      = Modifier.fillMaxWidth(),
+                                shape         = RoundedCornerShape(12.dp),
+                            )
 
-            ChargesSection(
-                chargeAmount = form.chargeAmount,
-                chargeNote   = form.chargeNote,
-                onAmountChange = { form = form.copy(chargeAmount = it) },
-                onNoteChange   = { form = form.copy(chargeNote = it) },
-            )
+                            Text("Select Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280))
 
-            Button(
-                onClick   = { onSave(form) },
-                enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && (if (isTransfer) form.toAccountId.isNotBlank() else form.categoryId.isNotBlank()),
-                modifier  = Modifier.fillMaxWidth().height(52.dp),
-                shape     = RoundedCornerShape(12.dp),
-                colors    = ButtonDefaults.buttonColors(containerColor = accentColor),
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Saving…", fontSize = 15.sp)
-                } else {
-                    Text(if (editing != null) "Update Record" else "Add Record", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                colorOptions.forEach { hex ->
+                                    val c = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color.Gray)
+                                    Box(
+                                        modifier = Modifier.size(40.dp)
+                                            .background(c, CircleShape)
+                                            .then(if (inlineCatColor == hex) Modifier.border(3.dp, Color(0xFF111827), CircleShape) else Modifier)
+                                            .clickable { inlineCatColor = hex }
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
+                            Button(
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                onClick  = {
+                                    if (inlineCatName.isNotBlank()) {
+                                        onAddCategory(inlineCatName, form.type, inlineCatColor) { newCat ->
+                                            form = form.copy(categoryId = newCat.id)
+                                            currentView = "form"
+                                        }
+                                    }
+                                }
+                            ) { Text("Save Category", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SubSheetHeader(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+    }
+    HorizontalDivider(color = Color(0xFFE5E7EB))
+}
+
+@Composable
+private fun DrillDownRow(label: String, value: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(label, fontSize = 11.sp, color = Color(0xFF6B7280))
+                Text(value, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
+            }
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color(0xFFD1D5DB))
     }
 }
 
@@ -875,11 +1047,11 @@ private fun DateSelectionField(
     modifier: Modifier = Modifier
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    
+
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = runCatching {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
-                timeZone = TimeZone.getTimeZone("UTC") 
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
             }
             sdf.parse(dateString)?.time
         }.getOrNull()
@@ -892,11 +1064,10 @@ private fun DateSelectionField(
             readOnly = true,
             label = { Text(label) },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             singleLine = true,
             trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null) }
         )
-        // Invisible overlay to intercept clicks perfectly
         Box(modifier = Modifier.matchParentSize().clickable { showPicker = true })
     }
 
@@ -906,15 +1077,13 @@ private fun DateSelectionField(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
-                            timeZone = TimeZone.getTimeZone("UTC") 
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
                         }
                         onDateSelected(sdf.format(Date(millis)))
                     }
                     showPicker = false
-                }) {
-                    Text("OK")
-                }
+                }) { Text("OK") }
             },
             dismissButton = {
                 TextButton(onClick = { showPicker = false }) { Text("Cancel") }
@@ -940,7 +1109,7 @@ private fun ChargesSection(
         OutlinedButton(
             onClick  = { open = true },
             modifier = Modifier.fillMaxWidth(),
-            shape    = RoundedCornerShape(10.dp),
+            shape    = RoundedCornerShape(12.dp),
             border   = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -950,7 +1119,7 @@ private fun ChargesSection(
     } else {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape    = RoundedCornerShape(10.dp),
+            shape    = RoundedCornerShape(12.dp),
             colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
             border   = BorderStroke(1.dp, Color(0xFFFED7AA)),
         ) {
@@ -1105,12 +1274,12 @@ private fun LabeledDropdown(
             onValueChange = {},
             readOnly      = true,
             label         = { Text(label) },
-            modifier      = Modifier.fillMaxWidth(), 
+            modifier      = Modifier.fillMaxWidth(),
             shape         = RoundedCornerShape(10.dp),
             trailingIcon  = { Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
         )
         Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
-        
+
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (id, name) ->
                 DropdownMenuItem(text = { Text(name, fontSize = 14.sp) }, onClick = { onSelect(id); expanded = false })

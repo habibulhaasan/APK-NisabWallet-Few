@@ -109,7 +109,24 @@ class TransactionsViewModel @Inject constructor(
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TransactionsUiState())
+    companion object {
+        // Calculate the first and last days of the current month
+        fun getCurrentMonthRange(): Pair<String, String> {
+            val cal = Calendar.getInstance()
+            val year = cal.get(Calendar.YEAR)
+            val month = cal.get(Calendar.MONTH) + 1
+            val start = "%04d-%02d-01".format(year, month)
+            val end = "%04d-%02d-%02d".format(year, month, cal.apply { set(year, month - 1, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH))
+            return Pair(start, end)
+        }
+    }
+
+    // Initialize state to filter to the current month by default
+    private val initialRange = getCurrentMonthRange()
+    private val _uiState = MutableStateFlow(TransactionsUiState(
+        filterStartDate = initialRange.first,
+        filterEndDate = initialRange.second
+    ))
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
 
     private val _events = MutableSharedFlow<TransactionEvent>()
@@ -308,6 +325,8 @@ class TransactionsViewModel @Inject constructor(
     fun setFilterAccount(accountId: String) = updateFilters { it.copy(filterAccountId = accountId) }
     fun setFilterCategory(categoryId: String) = updateFilters { it.copy(filterCategoryId = categoryId) }
     fun setFilterDateRange(start: String, end: String) = updateFilters { it.copy(filterStartDate = start, filterEndDate = end) }
+    
+    // Clear filters sets everything to blank, revealing ALL data
     fun clearFilters() = updateFilters { 
         it.copy(
             filterType = "All",

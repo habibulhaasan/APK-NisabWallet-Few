@@ -262,7 +262,7 @@ private fun GroceryHeader(onAddItem: () -> Unit) {
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Monthly Grocery Planner", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Gray900)
+                Text("Monthly Grocery", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Gray900)
                 Spacer(Modifier.width(6.dp))
                 Surface(shape = RoundedCornerShape(50), color = Amber100) {
                     Row(
@@ -275,7 +275,7 @@ private fun GroceryHeader(onAddItem: () -> Unit) {
                     }
                 }
             }
-            Text("Plan, track and record your monthly grocery purchases", fontSize = 11.sp, color = Gray500)
+            Text("Plan, track and record monthly grocery", fontSize = 11.sp, color = Gray500)
         }
         IconButton(
             onClick = onAddItem,
