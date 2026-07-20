@@ -111,6 +111,8 @@ data class LendingsUiState(
     val overdueCount: Int = 0,
     
     val filterStatus: String = "all",
+    val filterType: String = "all",
+    val searchQuery: String = "",
 
     val showLendingModal: Boolean = false,
     val showPaymentModal: Boolean = false,
@@ -228,11 +230,17 @@ class LendingsViewModel @Inject constructor(
         }
 
         val filtered = rawLendings.filter { lending ->
-            when (state.filterStatus) {
+            val matchStatus = when (state.filterStatus) {
                 "all" -> true
                 "overdue" -> calculateLendingStatus(lending).isOverdue
                 else -> lending.status == state.filterStatus
             }
+            val matchType = state.filterType == "all" || lending.lendingType == state.filterType
+            val matchSearch = state.searchQuery.isBlank() || 
+                              lending.borrowerName.contains(state.searchQuery, ignoreCase = true) ||
+                              lending.notes.contains(state.searchQuery, ignoreCase = true)
+            
+            matchStatus && matchType && matchSearch
         }
 
         _uiState.update { 
@@ -271,7 +279,10 @@ class LendingsViewModel @Inject constructor(
         accListener?.remove()
     }
 
+    // ─── Filters ───
     fun setFilterStatus(s: String) { _uiState.update { it.copy(filterStatus = s) }; combineAndEmit() }
+    fun setFilterType(t: String) { _uiState.update { it.copy(filterType = t) }; combineAndEmit() }
+    fun setSearchQuery(q: String) { _uiState.update { it.copy(searchQuery = q) }; combineAndEmit() }
 
     fun openLendingModal(lending: Lending? = null) {
         if (lending != null) {

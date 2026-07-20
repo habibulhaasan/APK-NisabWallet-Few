@@ -10,16 +10,19 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -29,7 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +48,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
+
+// Project Resource Import
+import com.hasan.nisabwallet.R
 
 import com.hasan.nisabwallet.ui.screens.admin.grocery.MonthlyGroceryScreen
 import com.hasan.nisabwallet.ui.screens.admin.ledger.MonthlyLedgerScreen
@@ -104,7 +112,6 @@ private data class NavTabItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
-// ─── Left Navigation Drawer Items ───
 private val drawerTabs = listOf(
     NavTabItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Home),
     NavTabItem(Routes.ACCOUNTS, "Accounts", Icons.Default.AccountBalanceWallet),
@@ -116,7 +123,7 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
     NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
     NavTabItem(Routes.LENDINGS, "Money Lent", Icons.Default.Money),
-    NavTabItem(Routes.SETTINGS, "Settings", Icons.Default.Settings)
+    NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite)
 )
 
 @Composable
@@ -130,6 +137,18 @@ fun NisabWalletRootNav(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var isFabExpanded by remember { mutableStateOf(false) }
+
+    // ─── Dynamic Drawer Colors ───
+    val isDarkTheme = isSystemInDarkTheme()
+    val drawerBgColor = if (isDarkTheme) Color(0xFF111827) else Color(0xFFF9FAFB)
+    val drawerTextColor = if (isDarkTheme) Color.White else Color(0xFF111827)
+    val drawerSubTextColor = if (isDarkTheme) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+    val dividerColor = if (isDarkTheme) Color(0xFF374151) else Color(0xFFE5E7EB)
+
+    val selectedItemBg = if (isDarkTheme) Color(0xFF1F2937) else Color(0xFFDBEAFE)
+    val selectedItemText = if (isDarkTheme) Color(0xFF34D399) else Color(0xFF2563EB)
+    val unselectedText = if (isDarkTheme) Color(0xFFD1D5DB) else Color(0xFF4B5563)
+    val unselectedIcon = if (isDarkTheme) Color(0xFF9CA3AF) else Color(0xFF6B7280)
 
     // ─── Bind to Settings for Default FAB Option ───
     val context = LocalContext.current
@@ -185,46 +204,97 @@ fun NisabWalletRootNav(
         gesturesEnabled = isTopLevel,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Color(0xFF111827),
-                drawerContentColor = Color.White,
+                drawerContainerColor = drawerBgColor,
+                drawerContentColor = drawerTextColor,
                 modifier = Modifier.width(300.dp)
             ) {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF34D399), modifier = Modifier.size(40.dp))
-                        Spacer(Modifier.height(12.dp))
-                        Text("Capital Sync", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text("Financial Operating System", color = Color(0xFF9CA3AF), fontSize = 12.sp)
-                    }
-                    HorizontalDivider(color = Color(0xFF374151), modifier = Modifier.padding(horizontal = 16.dp))
-                    Spacer(Modifier.height(16.dp))
+                Column(Modifier.fillMaxSize()) {
 
-                    drawerTabs.forEach { tab ->
-                        val isSelected = currentRoute == tab.route
-                        NavigationDrawerItem(
-                            label = {
-                                Text(tab.label, color = if (isSelected) Color(0xFF34D399) else Color(0xFFD1D5DB), fontSize = 15.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
-                            },
-                            selected = isSelected,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                if (currentRoute != tab.route) {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(id = navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
+                    // ─── Header Section (Custom Image Logo + App Name) ───
+                    Column(modifier = Modifier.padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 20.dp)) {
+                        Image(
+                            painter = painterResource(id = R.drawable.nisab_logo), // Place your image in res/drawable/app_logo.png
+                            contentDescription = "Nisab Wallet Logo",
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text("Nisab Wallet", color = drawerTextColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Personal Finance & Zakat", color = drawerSubTextColor, fontSize = 12.sp)
+                    }
+
+                    HorizontalDivider(color = dividerColor, modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(Modifier.height(8.dp))
+
+                    // ─── Scrollable Menu Tabs ───
+                    Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                        drawerTabs.forEach { tab ->
+                            val isSelected = currentRoute == tab.route
+                            NavigationDrawerItem(
+                                label = {
+                                    Text(tab.label, color = if (isSelected) selectedItemText else unselectedText, fontSize = 14.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
+                                },
+                                selected = isSelected,
+                                onClick = {
+                                    scope.launch { drawerState.close() }
+                                    if (currentRoute != tab.route) {
+                                        navController.navigate(tab.route) {
+                                            popUpTo(id = navController.graph.findStartDestination().id) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                },
+                                icon = { Icon(tab.icon, null, tint = if (isSelected) selectedItemText else unselectedIcon, modifier = Modifier.size(22.dp)) },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = selectedItemBg,
+                                    unselectedContainerColor = Color.Transparent
+                                ),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // ─── Fixed Footer Section (Profile & Logout) ───
+                    HorizontalDivider(color = dividerColor)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    scope.launch { drawerState.close() }
+                                    navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AccountCircle, null, tint = unselectedIcon, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Profile & Settings", color = drawerTextColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    scope.launch { drawerState.close() }
+                                    FirebaseAuth.getInstance().signOut()
+                                    navController.navigate(Routes.LOGIN) {
+                                        popUpTo(0) { inclusive = true }
                                     }
                                 }
-                            },
-                            icon = { Icon(tab.icon, null, tint = if (isSelected) Color(0xFF34D399) else Color(0xFF9CA3AF), modifier = Modifier.size(22.dp)) },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = Color(0xFF1F2937),
-                                unselectedContainerColor = Color.Transparent
-                            ),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color(0xFFEF4444), modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Logout", color = Color(0xFFEF4444), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        }
                     }
-                    Spacer(Modifier.height(24.dp))
                 }
             }
         }
@@ -433,12 +503,14 @@ fun NisabWalletNavGraph(
         }
 
         composable(Routes.ACCOUNTS) { backStackEntry ->
-            // Replaced the nullable getter with the guaranteed entry StateHandle
             val savedStateHandle = backStackEntry.savedStateHandle
             val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
 
-            // Once you update AccountsScreen to accept triggerFabAdd, pass it here!
-            AccountsScreen(onNavigateBack = { navController.popBackStack() })
+            AccountsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.CATEGORIES) { backStackEntry ->
@@ -528,11 +600,14 @@ fun NisabWalletNavGraph(
             )
         }
 
+        composable(Routes.ZAKAT) {
+            com.hasan.nisabwallet.ui.screens.zakat.ZakatScreen()
+        }
+
         val placeholders = listOf(
             Routes.TRANSFER to "Transfer",
             Routes.GOALS to "Goals",
             Routes.ANALYTICS to "Analytics",
-            Routes.ZAKAT to "Zakat",
             Routes.SUBSCRIPTION to "Subscription",
         )
 

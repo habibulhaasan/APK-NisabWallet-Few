@@ -37,6 +37,7 @@ fun CategoriesScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
     var categoryToDelete by remember { mutableStateOf<CategoryItem?>(null) }
 
     // ─── Dynamic FAB Trigger ───
@@ -192,22 +193,18 @@ fun CategoriesScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-                                    Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF16A34A), modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.TrendingUp, null, tint = Color(0xFF16A34A), modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Income Categories (${incomes.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 }
                                 if (incomes.isEmpty()) {
                                     Text("No income categories yet", fontSize = 13.sp, color = Color(0xFF6B7280), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
                                 } else {
-                                    FlowRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         incomes.forEach { cat ->
                                             CategoryCard(
                                                 category = cat,
-                                                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(0.48f),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 onEdit = { viewModel.openEditModal(it) },
                                                 onDelete = { categoryToDelete = it }
                                             )
@@ -228,22 +225,18 @@ fun CategoriesScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-                                    Icon(Icons.Default.LocalOffer, null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.TrendingDown, null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Expense Categories (${expenses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 }
                                 if (expenses.isEmpty()) {
                                     Text("No expense categories yet", fontSize = 13.sp, color = Color(0xFF6B7280), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
                                 } else {
-                                    FlowRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         expenses.forEach { cat ->
                                             CategoryCard(
                                                 category = cat,
-                                                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(0.48f),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 onEdit = { viewModel.openEditModal(it) },
                                                 onDelete = { categoryToDelete = it }
                                             )
@@ -311,7 +304,6 @@ private fun CategoryCard(
     onDelete: (CategoryItem) -> Unit
 ) {
     val catColor = runCatching { Color(android.graphics.Color.parseColor(category.color)) }.getOrDefault(Color.Gray)
-
     val bgColor = if (category.isSystem) Color(0xFFECFDF5).copy(alpha = 0.4f) else Color.Transparent
     val borderColor = if (category.isSystem) Color(0xFFA7F3D0) else Color(0xFFE5E7EB)
 
@@ -321,67 +313,61 @@ private fun CategoryCard(
         color = bgColor,
         border = BorderStroke(1.dp, borderColor)
     ) {
-        Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            // Badges
-            if (category.isSystem) {
-                Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp),
-                    shape = RoundedCornerShape(50), color = Color(0xFFD1FAE5), border = BorderStroke(1.dp, Color(0xFF6EE7B7))
-                ) {
-                    Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Lock, null, tint = Color(0xFF047857), modifier = Modifier.size(8.dp))
-                        Spacer(Modifier.width(2.dp))
-                        Text("System", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFF047857))
-                    }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.size(36.dp).background(catColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.size(12.dp).background(catColor, CircleShape))
                 }
-            } else if (category.isDefault) {
-                Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp),
-                    shape = RoundedCornerShape(50), color = Color(0xFFEFF6FF), border = BorderStroke(1.dp, Color(0xFFBFDBFE))
-                ) {
-                    Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF2563EB), modifier = Modifier.size(8.dp))
-                        Spacer(Modifier.width(2.dp))
-                        Text("Default", fontSize = 8.sp, fontWeight = FontWeight.Medium, color = Color(0xFF2563EB))
-                    }
-                }
-            }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = category.name,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF111827),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        if (category.isSystem) {
+                            Surface(shape = RoundedCornerShape(50), color = Color(0xFFD1FAE5), border = BorderStroke(1.dp, Color(0xFF6EE7B7))) {
+                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Lock, null, tint = Color(0xFF047857), modifier = Modifier.size(10.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("System", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                                }
+                            }
+                        } else if (category.isDefault) {
+                            Surface(shape = RoundedCornerShape(50), color = Color(0xFFEFF6FF), border = BorderStroke(1.dp, Color(0xFFBFDBFE))) {
+                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF2563EB), modifier = Modifier.size(10.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Default", fontSize = 9.sp, fontWeight = FontWeight.Medium, color = Color(0xFF2563EB))
+                                }
+                            }
+                        }
 
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 40.dp)) {
-                    Box(modifier = Modifier.size(28.dp).background(catColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                        Box(modifier = Modifier.size(10.dp).background(catColor, CircleShape))
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = category.name,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF111827),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                         if (category.isRiba) {
+                            Spacer(Modifier.width(6.dp))
                             Surface(color = Color(0xFFFFFBEB), border = BorderStroke(1.dp, Color(0xFFFDE68A)), shape = RoundedCornerShape(50)) {
-                                Text("⚠ RIBA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                Text("⚠ RIBA", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }
                         }
                     }
                 }
+            }
 
-                Spacer(Modifier.height(12.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    IconButton(onClick = { onEdit(category) }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Edit, "Edit", tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
-                    }
-                    IconButton(
-                        onClick = { onDelete(category) },
-                        enabled = !category.isSystem,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, "Delete", tint = if (category.isSystem) Color(0xFFE5E7EB) else Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Row(horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = { onEdit(category) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, "Edit", tint = Color(0xFF6B7280), modifier = Modifier.size(18.dp))
+                }
+                if (!category.isSystem) {
+                    IconButton(onClick = { onDelete(category) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -432,7 +418,7 @@ private fun AddEditCategoryModal(
 
             // Header
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(if (form.id != null) "Edit Category" else "Add Category", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                Text(if (form.id != null) "Edit Category" else "Add Category", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, null)
                 }
@@ -452,7 +438,7 @@ private fun AddEditCategoryModal(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Default.Lock, null, tint = Color(0xFF059669), modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                            Icon(Icons.Default.Lock, null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp).padding(top = 2.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("This is a system category. You can change the colour but not the name or type.", fontSize = 12.sp, color = Color(0xFF065F46))
                         }
@@ -466,7 +452,7 @@ private fun AddEditCategoryModal(
                     placeholder = { Text("e.g. Salary, Groceries") },
                     enabled = !form.isSystem,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledContainerColor = Color(0xFFF9FAFB),
@@ -483,11 +469,11 @@ private fun AddEditCategoryModal(
                 )
 
                 Column {
-                    Text("Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151), modifier = Modifier.padding(bottom = 8.dp))
+                    Text("Select Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151), modifier = Modifier.padding(bottom = 12.dp))
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         colorsList.forEach { hex ->
                             val c = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color.Gray)
@@ -495,16 +481,14 @@ private fun AddEditCategoryModal(
 
                             Box(
                                 modifier = Modifier
-                                    .weight(1f, fill = false).fillMaxWidth(0.18f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(48.dp) // Distinct large circles
+                                    .clip(CircleShape)
                                     .background(c)
-                                    .then(if (isSelected) Modifier.border(3.dp, Color(0x66000000), RoundedCornerShape(8.dp)) else Modifier)
                                     .clickable { onUpdateForm { it.copy(color = hex) } },
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isSelected) {
-                                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(28.dp))
                                 }
                             }
                         }
@@ -515,20 +499,20 @@ private fun AddEditCategoryModal(
             // Footer
             HorizontalDivider()
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("Cancel") }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
                 Button(
                     onClick = onSave,
                     enabled = !isSaving,
                     modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))
                 ) {
                     if (isSaving) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
-                        Text("Saving...", fontSize = 15.sp)
+                        Text("Saving...", fontSize = 14.sp)
                     } else {
-                        Text(if (form.id != null) "Update" else "Add Category", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (form.id != null) "Update Category" else "Add Category", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

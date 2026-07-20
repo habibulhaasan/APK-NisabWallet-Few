@@ -102,6 +102,7 @@ data class LoansUiState(
     
     val filterStatus: String = "active",
     val filterType: String = "all",
+    val searchQuery: String = "",
 
     val showLoanModal: Boolean = false,
     val showPaymentModal: Boolean = false,
@@ -228,8 +229,12 @@ class LoansViewModel @Inject constructor(
         upcoming.sortBy { it.daysUntilDue }
 
         val filtered = rawLoans.filter { loan ->
-            (state.filterStatus == "all" || loan.status == state.filterStatus) &&
-            (state.filterType == "all" || loan.loanType == state.filterType)
+            val matchStatus = state.filterStatus == "all" || loan.status == state.filterStatus
+            val matchType = state.filterType == "all" || loan.loanType == state.filterType
+            val matchSearch = state.searchQuery.isBlank() || 
+                              loan.lenderName.contains(state.searchQuery, ignoreCase = true) || 
+                              loan.notes.contains(state.searchQuery, ignoreCase = true)
+            matchStatus && matchType && matchSearch
         }
 
         _uiState.update { 
@@ -256,6 +261,7 @@ class LoansViewModel @Inject constructor(
     // ─── Filter Intents ───
     fun setFilterStatus(s: String) { _uiState.update { it.copy(filterStatus = s) }; combineAndEmit(null) }
     fun setFilterType(t: String) { _uiState.update { it.copy(filterType = t) }; combineAndEmit(null) }
+    fun setSearchQuery(q: String) { _uiState.update { it.copy(searchQuery = q) }; combineAndEmit(null) }
 
     // ─── Calculation Engine ───
     fun calculateLoanDetails(form: LoanForm): LoanCalculations {
