@@ -1,5 +1,7 @@
 package com.hasan.nisabwallet.navigation
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -9,19 +11,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,8 +42,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 
-// ─── Import New Screens ───
 import com.hasan.nisabwallet.ui.screens.admin.grocery.MonthlyGroceryScreen
 import com.hasan.nisabwallet.ui.screens.admin.ledger.MonthlyLedgerScreen
 import com.hasan.nisabwallet.ui.screens.auth.LoginScreen
@@ -71,7 +72,7 @@ object Routes {
     const val SETTINGS = "dashboard/settings"
 
     const val ACCOUNTS = "dashboard/accounts"
-    const val CATEGORIES = "dashboard/categories" // Added for Transactions module routing
+    const val CATEGORIES = "dashboard/categories"
     const val TRANSFER = "dashboard/transfer"
     const val GOALS = "dashboard/goals"
     const val JEWELLERY = "dashboard/jewellery"
@@ -91,7 +92,10 @@ object Routes {
     const val LENDING_DETAIL = "dashboard/lendings/{lendingId}"
     fun createLendingDetailRoute(id: String) = "dashboard/lendings/$id"
 
-    val BOTTOM_NAV_ROUTES = listOf(DASHBOARD, TRANSACTIONS, MONTHLY_LEDGER, MONTHLY_GROCERY, SETTINGS)
+    val TOP_LEVEL_ROUTES = listOf(
+        DASHBOARD, TRANSACTIONS, ACCOUNTS, CATEGORIES, INVESTMENTS,
+        LOANS, LENDINGS, JEWELLERY, SETTINGS, MONTHLY_LEDGER, MONTHLY_GROCERY
+    )
 }
 
 private data class NavTabItem(
@@ -100,12 +104,19 @@ private data class NavTabItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
-private val navigationTabs = listOf(
-    NavTabItem(Routes.DASHBOARD, "Home", Icons.Default.Home),
+// ─── Left Navigation Drawer Items ───
+private val drawerTabs = listOf(
+    NavTabItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Home),
+    NavTabItem(Routes.ACCOUNTS, "Accounts", Icons.Default.AccountBalanceWallet),
     NavTabItem(Routes.TRANSACTIONS, "Transactions", Icons.Default.Receipt),
-    NavTabItem(Routes.MONTHLY_LEDGER, "Ledger", Icons.Default.AccountBalance),
-    NavTabItem(Routes.MONTHLY_GROCERY, "Grocery", Icons.Default.ShoppingCart),
-    NavTabItem(Routes.SETTINGS, "Settings", Icons.Default.Settings),
+    NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
+    NavTabItem(Routes.MONTHLY_LEDGER, "Monthly Ledger", Icons.Default.AccountBalance),
+    NavTabItem(Routes.MONTHLY_GROCERY, "Monthly Grocery", Icons.Default.ShoppingCart),
+    NavTabItem(Routes.INVESTMENTS, "Investments", Icons.AutoMirrored.Filled.TrendingUp),
+    NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
+    NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
+    NavTabItem(Routes.LENDINGS, "Money Lent", Icons.Default.Money),
+    NavTabItem(Routes.SETTINGS, "Settings", Icons.Default.Settings)
 )
 
 @Composable
@@ -114,115 +125,213 @@ fun NisabWalletRootNav(
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showFloatingNav = currentRoute in Routes.BOTTOM_NAV_ROUTES
+    val isTopLevel = currentRoute in Routes.TOP_LEVEL_ROUTES
 
-    var isMenuExpanded by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var isFabExpanded by remember { mutableStateOf(false) }
 
-    Scaffold { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    // ─── Bind to Settings for Default FAB Option ───
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("nisab_prefs", Context.MODE_PRIVATE) }
+    var defaultFabRoute by remember { mutableStateOf(sharedPrefs.getString("default_fab", Routes.TRANSACTIONS) ?: Routes.TRANSACTIONS) }
 
-            NisabWalletNavGraph(
-                navController = navController,
-                modifier = Modifier.padding(padding),
-            )
+    DisposableEffect(sharedPrefs) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "default_fab") defaultFabRoute = prefs.getString("default_fab", Routes.TRANSACTIONS) ?: Routes.TRANSACTIONS
+        }
+        sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { sharedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 
-            // Dim screen mask when the floating menu is active[cite: 18]
-            if (showFloatingNav && isMenuExpanded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.32f))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { isMenuExpanded = false }
-                )
+    // ─── Dynamic Contextual FAB Menu ───
+    val dynamicQuickActions = remember(currentRoute, defaultFabRoute) {
+        val actions = mutableListOf<NavTabItem>()
+
+        val contextualAction = when (currentRoute) {
+            Routes.JEWELLERY -> NavTabItem("action_add", "Add Jewellery", Icons.Default.Diamond)
+            Routes.LOANS -> NavTabItem("action_add", "Add Loan Record", Icons.Default.AccountBalance)
+            Routes.LENDINGS -> NavTabItem("action_add", "Add Lending Record", Icons.Default.Money)
+            Routes.INVESTMENTS -> NavTabItem("action_add", "Add Investment", Icons.AutoMirrored.Filled.TrendingUp)
+            Routes.ACCOUNTS -> NavTabItem("action_add", "Add Account", Icons.Default.AccountBalanceWallet)
+            Routes.CATEGORIES -> NavTabItem("action_add", "Add Category", Icons.Default.Category)
+            else -> null
+        }
+
+        if (contextualAction != null) {
+            actions.add(contextualAction)
+        } else {
+            val defaultItem = when(defaultFabRoute) {
+                Routes.JEWELLERY -> NavTabItem(Routes.JEWELLERY, "Add Jewellery", Icons.Default.Diamond)
+                Routes.LOANS -> NavTabItem(Routes.LOANS, "Add Loan Record", Icons.Default.AccountBalance)
+                Routes.INVESTMENTS -> NavTabItem(Routes.INVESTMENTS, "Add Investment", Icons.AutoMirrored.Filled.TrendingUp)
+                else -> NavTabItem(Routes.TRANSACTIONS, "New Transaction", Icons.Default.AddCard)
             }
+            actions.add(defaultItem)
+        }
 
-            // Context Floating Navigation System Layout[cite: 18]
-            if (showFloatingNav) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+        if (actions.none { it.route == Routes.TRANSACTIONS }) {
+            actions.add(NavTabItem(Routes.TRANSACTIONS, "New Transaction", Icons.Default.AddCard))
+        }
+        actions.add(NavTabItem(Routes.TRANSFER, "Transfer Funds", Icons.Default.SwapHoriz))
 
-                    // Floating Expanded Navigation Menu
-                    AnimatedVisibility(
-                        visible = isMenuExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+        actions
+    }
+
+    LaunchedEffect(currentRoute) { isFabExpanded = false }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = isTopLevel,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Color(0xFF111827),
+                drawerContentColor = Color.White,
+                modifier = Modifier.width(300.dp)
+            ) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF34D399), modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text("Capital Sync", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Financial Operating System", color = Color(0xFF9CA3AF), fontSize = 12.sp)
+                    }
+                    HorizontalDivider(color = Color(0xFF374151), modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(Modifier.height(16.dp))
+
+                    drawerTabs.forEach { tab ->
+                        val isSelected = currentRoute == tab.route
+                        NavigationDrawerItem(
+                            label = {
+                                Text(tab.label, color = if (isSelected) Color(0xFF34D399) else Color(0xFFD1D5DB), fontSize = 15.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
+                            },
+                            selected = isSelected,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                if (currentRoute != tab.route) {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(id = navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            icon = { Icon(tab.icon, null, tint = if (isSelected) Color(0xFF34D399) else Color(0xFF9CA3AF), modifier = Modifier.size(22.dp)) },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = Color(0xFF1F2937),
+                                unselectedContainerColor = Color.Transparent
+                            ),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+        }
+    ) {
+        Scaffold { padding ->
+            Box(modifier = Modifier.fillMaxSize()) {
+
+                NisabWalletNavGraph(
+                    navController = navController,
+                    modifier = Modifier.padding(padding),
+                )
+
+                // ─── Top Left Hamburger Menu Toggle ───
+                if (isTopLevel) {
+                    Box(
+                        modifier = Modifier
+                            .padding(padding)
+                            .padding(top = 16.dp, start = 16.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color(0xFF111827), // Deep premium gray-black theme
-                            tonalElevation = 8.dp,
-                            modifier = Modifier.width(280.dp)
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.White.copy(alpha = 0.9f), CircleShape)
+                                .border(1.dp, Color(0xFFE5E7EB), CircleShape)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            Icon(Icons.Default.Menu, contentDescription = "Open Navigation", tint = Color(0xFF111827))
+                        }
+                    }
+                }
+
+                // ─── Floating Quick Actions FAB ───
+                if (isTopLevel) {
+                    if (isFabExpanded) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.4f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { isFabExpanded = false }
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 24.dp, end = 24.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        AnimatedVisibility(
+                            visible = isFabExpanded,
+                            enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+                            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.White,
+                                shadowElevation = 8.dp,
+                                modifier = Modifier.width(220.dp)
                             ) {
-                                navigationTabs.forEach { tab ->
-                                    val isSelected = currentRoute == tab.route
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(if (isSelected) Color(0xFF1F2937) else Color.Transparent)
-                                            .clickable {
-                                                isMenuExpanded = false
-                                                if (currentRoute != tab.route) {
-                                                    navController.navigate(tab.route) {
-                                                        popUpTo(navController.graph.findStartDestination().id) {
-                                                            saveState = true
-                                                        }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    dynamicQuickActions.forEach { action ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    isFabExpanded = false
+                                                    if (action.route == "action_add") {
+                                                        navController.currentBackStackEntry?.savedStateHandle?.set("triggerAdd", System.currentTimeMillis())
+                                                    } else if (currentRoute != action.route) {
+                                                        navController.navigate(action.route) { launchSingleTop = true }
+                                                    } else {
+                                                        navController.currentBackStackEntry?.savedStateHandle?.set("triggerAdd", System.currentTimeMillis())
                                                     }
                                                 }
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = tab.icon,
-                                            contentDescription = tab.label,
-                                            tint = if (isSelected) Color(0xFF34D399) else Color(0xFF9CA3AF),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(Modifier.width(14.dp))
-                                        Text(
-                                            text = tab.label,
-                                            color = if (isSelected) Color.White else Color(0xFF9CA3AF),
-                                            fontSize = 14.sp,
-                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                        )
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(action.icon, null, tint = Color(0xFF2563EB), modifier = Modifier.size(20.dp))
+                                            Spacer(Modifier.width(12.dp))
+                                            Text(action.label, color = Color(0xFF111827), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // Centered Floating Trigger Button
-                    val rotationAnimation by animateFloatAsState(targetValue = if (isMenuExpanded) 90f else 0f, label = "")
-
-                    FloatingActionButton(
-                        onClick = { isMenuExpanded = !isMenuExpanded },
-                        shape = CircleShape,
-                        containerColor = Color(0xFF111827),
-                        contentColor = Color.White,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isMenuExpanded) Icons.Default.Close else Icons.Default.Menu,
-                            contentDescription = "Toggle Menu",
-                            modifier = Modifier
-                                .size(24.dp)
-                                .rotate(rotationAnimation)
-                        )
+                        val rotationAnimation by animateFloatAsState(targetValue = if (isFabExpanded) 135f else 0f, label = "")
+                        FloatingActionButton(
+                            onClick = { isFabExpanded = !isFabExpanded },
+                            shape = CircleShape,
+                            containerColor = Color(0xFF2563EB),
+                            contentColor = Color.White,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Quick Actions",
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .rotate(rotationAnimation)
+                            )
+                        }
                     }
                 }
             }
@@ -323,24 +432,46 @@ fun NisabWalletNavGraph(
             )
         }
 
-        // ─── Newly Implemented Modules ───
+        composable(Routes.ACCOUNTS) { backStackEntry ->
+            // Replaced the nullable getter with the guaranteed entry StateHandle
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
 
-        composable(Routes.ACCOUNTS) {
+            // Once you update AccountsScreen to accept triggerFabAdd, pass it here!
             AccountsScreen(onNavigateBack = { navController.popBackStack() })
         }
 
-        composable(Routes.CATEGORIES) {
-            CategoriesScreen(onNavigateBack = { navController.popBackStack() })
+        composable(Routes.CATEGORIES) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
+            CategoriesScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
-        composable(Routes.JEWELLERY) {
-            JewelleryScreen(onNavigateBack = { navController.popBackStack() })
+        composable(Routes.JEWELLERY) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
+            JewelleryScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
-        composable(Routes.INVESTMENTS) {
+        composable(Routes.INVESTMENTS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             InvestmentsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { id -> navController.navigate(Routes.createInvestmentDetailRoute(id)) }
+                onNavigateToDetail = { id: String -> navController.navigate(Routes.createInvestmentDetailRoute(id)) }
             )
         }
 
@@ -350,14 +481,19 @@ fun NisabWalletNavGraph(
         ) {
             InvestmentDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEdit = { /* Edit is handled internally via BottomSheet */ }
+                onNavigateToEdit = { id: String -> /* BottomSheet handled internally */ }
             )
         }
 
-        composable(Routes.LOANS) {
+        composable(Routes.LOANS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             LoansScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { id -> navController.navigate(Routes.createLoanDetailRoute(id)) }
+                onNavigateToDetail = { id: String -> navController.navigate(Routes.createLoanDetailRoute(id)) }
             )
         }
 
@@ -367,14 +503,19 @@ fun NisabWalletNavGraph(
         ) {
             LoanDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEdit = { /* Edit is handled internally via BottomSheet */ }
+                onNavigateToEdit = { id: String -> navController.popBackStack(Routes.LOANS, false) }
             )
         }
 
-        composable(Routes.LENDINGS) {
+        composable(Routes.LENDINGS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             LendingsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToDetail = { id -> navController.navigate(Routes.createLendingDetailRoute(id)) }
+                onNavigateToDetail = { id: String -> navController.navigate(Routes.createLendingDetailRoute(id)) }
             )
         }
 
@@ -386,8 +527,6 @@ fun NisabWalletNavGraph(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-
-        // ─── Remaining Placeholders[cite: 18] ───
 
         val placeholders = listOf(
             Routes.TRANSFER to "Transfer",

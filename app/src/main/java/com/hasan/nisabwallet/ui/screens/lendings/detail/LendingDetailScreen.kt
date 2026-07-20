@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -110,7 +111,7 @@ fun LendingDetailScreen(
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(lending.borrowerName, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if(isQard) "Qard Hasan (Interest-Free)" else "Conventional Lending", fontSize = 13.sp, color = Color(0xFF6B7280))
+                        Text(if(isQard) "Qard Hasan (Interest-Free)" else "Conventional Lending", fontSize = 13.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -166,16 +167,26 @@ fun LendingDetailScreen(
                         Spacer(Modifier.height(16.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("৳${CurrencyFormatter.formatBDT(lending.totalRepaid)} / ৳${CurrencyFormatter.formatBDT(lending.principalAmount)}", fontSize = 12.sp, color = Color(0xFF4B5563))
-                            Text("${status.percentagePaid}% Repaid", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                            Text("${String.format(Locale.US, "%.1f", status.percentagePaid)}% Repaid", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                         }
-                        LinearProgressIndicator(progress = { (status.percentagePaid / 100f).toFloat() }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(12.dp).clip(RoundedCornerShape(6.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
+                        LinearProgressIndicator(progress = { (status.percentagePaid / 100f).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(12.dp).clip(RoundedCornerShape(6.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
 
                         Spacer(Modifier.height(16.dp))
-                        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            InfoBox(Icons.Default.AttachMoney, "Principal", fmt(lending.principalAmount), Color(0xFF2563EB), Color(0xFFEFF6FF), Modifier.weight(1f, false).fillMaxWidth(0.45f))
-                            InfoBox(Icons.Default.CheckCircle, "Repaid", fmt(lending.totalRepaid), Color(0xFF16A34A), Color(0xFFF0FDF4), Modifier.weight(1f, false).fillMaxWidth(0.45f))
-                            InfoBox(Icons.AutoMirrored.Filled.TrendingUp, "Remaining", fmt(status.remainingBalance), Color(0xFFDC2626), Color(0xFFFEF2F2), Modifier.weight(1f, false).fillMaxWidth(0.45f))
-                            InfoBox(Icons.Default.Schedule, "Payments", "${lending.paymentsReceived}${if(lending.totalInstallments!=null) " / ${lending.totalInstallments}" else ""}", Color(0xFF9333EA), Color(0xFFFAF5FF), Modifier.weight(1f, false).fillMaxWidth(0.45f))
+
+                        // 4-Grid Simulator
+                        val infoBoxes = mutableListOf<@Composable () -> Unit>()
+                        infoBoxes.add { InfoBox(Icons.Default.AttachMoney, "Principal", fmt(lending.principalAmount), Color(0xFF2563EB), Color(0xFFEFF6FF), Modifier.fillMaxWidth()) }
+                        infoBoxes.add { InfoBox(Icons.Default.CheckCircle, "Repaid", fmt(lending.totalRepaid), Color(0xFF16A34A), Color(0xFFF0FDF4), Modifier.fillMaxWidth()) }
+                        infoBoxes.add { InfoBox(Icons.AutoMirrored.Filled.TrendingUp, "Remaining", fmt(status.remainingBalance), Color(0xFFDC2626), Color(0xFFFEF2F2), Modifier.fillMaxWidth()) }
+                        infoBoxes.add { InfoBox(Icons.Default.Schedule, "Payments", "${lending.paymentsReceived}${if(lending.totalInstallments!=null) " / ${lending.totalInstallments}" else ""}", Color(0xFF9333EA), Color(0xFFFAF5FF), Modifier.fillMaxWidth()) }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            for (i in infoBoxes.indices step 2) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                    Box(Modifier.weight(1f)) { infoBoxes[i]() }
+                                    if (i + 1 < infoBoxes.size) Box(Modifier.weight(1f)) { infoBoxes[i + 1]() } else Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
@@ -247,8 +258,8 @@ fun LendingDetailScreen(
                                             }
                                             Spacer(Modifier.width(12.dp))
                                             Column {
-                                                Text(w.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                                if (w.contact.isNotBlank()) Text(w.contact, fontSize = 11.sp, color = Color(0xFF4B5563))
+                                                Text(w.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                if (w.contact.isNotBlank()) Text(w.contact, fontSize = 11.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                         }
                                     }
@@ -267,7 +278,7 @@ fun LendingDetailScreen(
                             TextRow("Total Payments Received", status.totalPayments.toString())
                             TextRow("Expected Payments", status.expectedPayments.toString())
                             TextRow("Payments On Time", status.paymentsOnTime.toString(), valColor = Color(0xFF16A34A))
-                            TextRow("Payments Missed", "0", valColor = Color(0xFFDC2626)) // Set to static 0 as it's not tracked
+                            TextRow("Payments Missed", "0", valColor = Color(0xFFDC2626))
                             TextRow("On-Time Rate", String.format(Locale.US, "%.0f%%", status.paymentRate))
                             TextRow("Reminders Sent", state.reminders.size.toString(), isLast = true)
                         }
@@ -318,9 +329,9 @@ fun LendingDetailScreen(
                                             Spacer(Modifier.width(12.dp))
                                             Column {
                                                 Text("Payment Received", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                                Text("${formatDisplayDate(p.paymentDate)} • ${p.paymentMethod.replaceFirstChar { it.uppercase() }.replace("-", " ")}", fontSize = 11.sp, color = Color(0xFF4B5563), modifier = Modifier.padding(top = 2.dp))
-                                                if (p.installmentNumber != null) Text("Installment #${p.installmentNumber}${if(lending.totalInstallments!=null) " of ${lending.totalInstallments}" else ""}", fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp))
-                                                if (p.notes.isNotBlank()) Text(p.notes, fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp))
+                                                Text("${formatDisplayDate(p.paymentDate)} • ${p.paymentMethod.replaceFirstChar { it.uppercase() }.replace("-", " ")}", fontSize = 11.sp, color = Color(0xFF4B5563), modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                if (p.installmentNumber != null) Text("Installment #${p.installmentNumber}${if(lending.totalInstallments!=null) " of ${lending.totalInstallments}" else ""}", fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                if (p.notes.isNotBlank()) Text(p.notes, fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                         }
                                         Text("+৳${CurrencyFormatter.formatBDT(p.amount)}", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color(0xFF16A34A))
@@ -352,7 +363,7 @@ fun LendingDetailScreen(
                                         Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp).padding(top = 2.dp))
                                         Spacer(Modifier.width(12.dp))
                                         Column {
-                                            Text("Reminder sent to ${r.borrowerContact}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                            Text("Reminder sent to ${r.borrowerContact}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(runCatching { SimpleDateFormat("MMM d, yyyy HH:mm", Locale.US).format(Date(r.sentAtMillis)) }.getOrDefault("Unknown"), fontSize = 11.sp, color = Color(0xFF4B5563), modifier = Modifier.padding(top = 2.dp))
                                             Surface(color = Color.White, border = BorderStroke(1.dp, Color(0xFFDBEAFE)), shape = RoundedCornerShape(6.dp), modifier = Modifier.padding(top = 8.dp).fillMaxWidth()) {
                                                 Text(r.message, fontSize = 11.sp, color = Color(0xFF374151), modifier = Modifier.padding(8.dp))
@@ -387,8 +398,8 @@ private fun InfoBox(icon: androidx.compose.ui.graphics.vector.ImageVector, label
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.background(bg, RoundedCornerShape(12.dp)).padding(16.dp)) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(8.dp))
-        Text(label, fontSize = 11.sp, color = Color(0xFF6B7280))
-        Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = tint, modifier = Modifier.padding(top = 2.dp))
+        Text(label, fontSize = 11.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = tint, modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -398,8 +409,8 @@ private fun DetailRow(label: String, value: String, icon: androidx.compose.ui.gr
         Icon(icon, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp).padding(top = 2.dp))
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(label, fontSize = 11.sp, color = Color(0xFF6B7280))
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), modifier = Modifier.padding(top = 2.dp))
+            Text(label, fontSize = 11.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
     if (!isLast) HorizontalDivider(color = Color(0xFFF3F4F6), modifier = Modifier.padding(start = 28.dp))
@@ -408,8 +419,8 @@ private fun DetailRow(label: String, value: String, icon: androidx.compose.ui.gr
 @Composable
 private fun TextRow(label: String, value: String, valColor: Color = Color(0xFF111827), isLast: Boolean = false) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-        Text(label, fontSize = 12.sp, color = Color(0xFF4B5563), modifier = Modifier.weight(1f))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valColor, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+        Text(label, fontSize = 12.sp, color = Color(0xFF4B5563), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valColor, textAlign = TextAlign.End, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (!isLast) HorizontalDivider(color = Color(0xFFF3F4F6))
 }

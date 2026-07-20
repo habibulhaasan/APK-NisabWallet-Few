@@ -40,12 +40,22 @@ import java.util.TimeZone
 @Composable
 fun LendingsScreen(
     viewModel: LendingsViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {},
     onNavigateBack: () -> Unit,
     onNavigateToDetail: (String) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
+
+    // ─── Dynamic FAB Trigger ───
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.openLendingModal()
+            onAddHandled()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -66,7 +76,7 @@ fun LendingsScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
+                // Header with Offset Spacer for Left Drawer Toggle
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -75,39 +85,47 @@ fun LendingsScreen(
                     ) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp).padding(end = 8.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color(0xFF111827))
-                                }
-                                Text("Lending Management", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                Spacer(modifier = Modifier.width(56.dp))
+                                Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Lending Management", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text("Track money lent to others (Qard Hasan & Conventional)", fontSize = 12.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 32.dp))
-                        }
-                        Button(
-                            onClick = { viewModel.openLendingModal() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827)),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("New", fontSize = 13.sp)
+                            Text("Track money lent to others", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 88.dp))
                         }
                     }
                 }
 
-                // Summary Cards
+                // Prominent Add Button
                 item {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Button(
+                        onClick = { viewModel.openLendingModal() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        SummaryCard("Total Lent", fmt(state.totalLent), Icons.AutoMirrored.Filled.TrendingUp, Color(0xFF2563EB), Modifier.weight(1f, false).fillMaxWidth(0.3f))
-                        SummaryCard("Repaid", fmt(state.totalRepaid), Icons.Default.CheckCircle, Color(0xFF16A34A), Modifier.weight(1f, false).fillMaxWidth(0.3f))
-                        SummaryCard("Outstanding", fmt(state.totalOutstanding), Icons.Default.AttachMoney, Color(0xFFDC2626), Modifier.weight(1f, false).fillMaxWidth(0.3f))
-                        SummaryCard("Active", state.activeCount.toString(), Icons.Default.AccessTime, Color(0xFFEA580C), Modifier.weight(1f, false).fillMaxWidth(0.3f))
-                        SummaryCard("Completed", state.completedCount.toString(), Icons.Default.CheckCircle, Color(0xFF059669), Modifier.weight(1f, false).fillMaxWidth(0.3f))
-                        SummaryCard("Overdue", state.overdueCount.toString(), Icons.Default.Warning, Color(0xFFDC2626), Modifier.weight(1f, false).fillMaxWidth(0.3f))
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add Lending Record", fontSize = 14.sp)
+                    }
+                }
+
+                // Summary Cards (Fixed Grid Simulator to prevent wrapping)
+                item {
+                    val cards = mutableListOf<@Composable () -> Unit>()
+                    cards.add { SummaryCard("Total Lent", fmt(state.totalLent), Icons.AutoMirrored.Filled.TrendingUp, Color(0xFF2563EB)) }
+                    cards.add { SummaryCard("Repaid", fmt(state.totalRepaid), Icons.Default.CheckCircle, Color(0xFF16A34A)) }
+                    cards.add { SummaryCard("Outstanding", fmt(state.totalOutstanding), Icons.Default.AttachMoney, Color(0xFFDC2626)) }
+                    cards.add { SummaryCard("Active", state.activeCount.toString(), Icons.Default.AccessTime, Color(0xFFEA580C)) }
+                    cards.add { SummaryCard("Completed", state.completedCount.toString(), Icons.Default.CheckCircle, Color(0xFF059669)) }
+                    cards.add { SummaryCard("Overdue", state.overdueCount.toString(), Icons.Default.Warning, Color(0xFFDC2626)) }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (i in cards.indices step 2) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                Box(Modifier.weight(1f)) { cards[i]() }
+                                if (i + 1 < cards.size) Box(Modifier.weight(1f)) { cards[i + 1]() } else Spacer(Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
 
@@ -117,13 +135,13 @@ fun LendingsScreen(
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             listOf("all" to "All", "active" to "Active", "completed" to "Completed", "overdue" to "Overdue").forEach { (v, l) ->
                                 val sel = state.filterStatus == v
                                 Box(
-                                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if(sel) Color(0xFF111827) else Color(0xFFF3F4F6)).clickable { viewModel.setFilterStatus(v) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if(sel) Color(0xFF111827) else Color(0xFFF3F4F6)).clickable { viewModel.setFilterStatus(v) }.padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
-                                ) { Text(l, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if(sel) Color.White else Color(0xFF374151)) }
+                                ) { Text(l, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if(sel) Color.White else Color(0xFF374151), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             }
                         }
                     }
@@ -139,7 +157,6 @@ fun LendingsScreen(
                             Spacer(Modifier.height(16.dp))
                             Text("No lending records", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
                             Text("Create a record when you lend money", fontSize = 13.sp, color = Color(0xFF6B7280))
-                            Button(onClick = { viewModel.openLendingModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827)), modifier = Modifier.padding(top = 16.dp), shape = RoundedCornerShape(10.dp)) { Text("Create Lending Record") }
                         }
                     }
                 } else {
@@ -171,7 +188,7 @@ fun LendingsScreen(
 
     if (state.showPaymentModal && state.selectedLending != null) {
         PaymentModal(
-            form = state.paymentForm, lending = state.selectedLending!!, isSaving = state.isSaving,
+            form = state.paymentForm, lending = state.selectedLending!!, accounts = state.accounts, isSaving = state.isSaving,
             onUpdateForm = { newForm -> viewModel.updatePaymentForm { newForm } },
             onDismiss = { viewModel.closePaymentModal() },
             onSave = { viewModel.submitPayment() }
@@ -199,6 +216,49 @@ fun LendingsScreen(
     }
 }
 
+// ─── Private Professional Dropdown Helpers ───
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdown(
+    label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { opt -> DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false }) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdownPair(
+    label: String, selectedValue: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = options.find { it.first == selectedValue }?.second ?: "Select"
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = display, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { (id, text) -> DropdownMenuItem(text = { Text(text) }, onClick = { onSelect(id); expanded = false }) }
+        }
+    }
+}
+
 @Composable
 private fun SummaryCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, valueColor: Color, modifier: Modifier = Modifier) {
     Card(
@@ -207,7 +267,7 @@ private fun SummaryCard(title: String, value: String, icon: androidx.compose.ui.
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(title.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280))
+                Text(title.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Icon(icon, null, tint = valueColor, modifier = Modifier.size(12.dp))
             }
             Spacer(Modifier.height(8.dp))
@@ -262,7 +322,7 @@ private fun LendingCard(
                             if (lending.borrowerContact.phone.isNotBlank()) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                                     Icon(Icons.Default.Phone, null, tint = Color(0xFF4B5563), modifier = Modifier.size(10.dp))
-                                    Text(" ${lending.borrowerContact.phone}", fontSize = 11.sp, color = Color(0xFF4B5563))
+                                    Text(" ${lending.borrowerContact.phone}", fontSize = 11.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -281,18 +341,18 @@ private fun LendingCard(
                 // Progress
                 Column(Modifier.padding(vertical = 12.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("৳${CurrencyFormatter.formatBDT(lending.totalRepaid)} / ৳${CurrencyFormatter.formatBDT(lending.principalAmount)}", fontSize = 11.sp, color = Color(0xFF4B5563))
+                        Text("৳${CurrencyFormatter.formatBDT(lending.totalRepaid)} / ৳${CurrencyFormatter.formatBDT(lending.principalAmount)}", fontSize = 11.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         Text("${String.format(Locale.US, "%.1f", statusInfo.percentagePaid)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
                     }
-                    LinearProgressIndicator(progress = { (statusInfo.percentagePaid / 100f).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = if(lending.status=="completed") Color(0xFF16A34A) else Color(0xFF2563EB), trackColor = Color(0xFFE5E7EB))
+                    LinearProgressIndicator(progress = { (statusInfo.percentagePaid / 100f).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = accent, trackColor = Color(0xFFE5E7EB))
                 }
 
                 // Details Grid
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column { Text("Principal", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(lending.principalAmount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827)) }
-                    Column { Text("Remaining", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(statusInfo.remainingBalance), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFDC2626)) }
-                    Column { Text("Payments", fontSize = 10.sp, color = Color(0xFF6B7280)); Text("${lending.paymentsReceived}${if(lending.totalInstallments!=null) " / ${lending.totalInstallments}" else ""}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827)) }
-                    Column { Text("Next Due", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(runCatching { SimpleDateFormat("dd/MM/yyyy", Locale.US).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(lending.nextPaymentDue ?: lending.dueDate)!!) }.getOrDefault(lending.dueDate), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827)) }
+                    Column(Modifier.weight(1f)) { Text("Principal", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(lending.principalAmount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Remaining", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(statusInfo.remainingBalance), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFDC2626), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Payments", fontSize = 10.sp, color = Color(0xFF6B7280)); Text("${lending.paymentsReceived}${if(lending.totalInstallments!=null) " / ${lending.totalInstallments}" else ""}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Next Due", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(runCatching { SimpleDateFormat("dd/MM/yyyy", Locale.US).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(lending.nextPaymentDue ?: lending.dueDate)!!) }.getOrDefault(lending.dueDate), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
 
                 // Witnesses
@@ -304,7 +364,7 @@ private fun LendingCard(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.People, null, tint = Color(0xFF6B7280), modifier = Modifier.size(10.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(w.name + if(w.contact.isNotBlank()) " (${w.contact})" else "", fontSize = 11.sp, color = Color(0xFF374151))
+                                Text(w.name + if(w.contact.isNotBlank()) " (${w.contact})" else "", fontSize = 11.sp, color = Color(0xFF374151), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -320,29 +380,29 @@ private fun AddEditLendingModal(
     form: LendingForm, accounts: List<LendingAccount>, isSaving: Boolean,
     onUpdateForm: (LendingForm) -> Unit, onDismiss: () -> Unit, onSave: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), containerColor = Color.White) {
+        Column(Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(if (form.id != null) "Edit Lending Record" else "New Lending Record", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                Text(if (form.id != null) "Edit Lending Record" else "New Lending Record", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                 IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
             }
             HorizontalDivider()
 
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
                 // Borrower Info
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Person, null, tint = Color(0xFF111827), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Borrower Information", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Borrower Information", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     }
-                    OutlinedTextField(value = form.borrowerName, onValueChange = { onUpdateForm(form.copy(borrowerName = it)) }, label = { Text("Full Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true)
+                    OutlinedTextField(value = form.borrowerName, onValueChange = { onUpdateForm(form.copy(borrowerName = it)) }, label = { Text("Full Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(value = form.borrowerPhone, onValueChange = { onUpdateForm(form.copy(borrowerPhone = it)) }, label = { Text("Phone") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-                        OutlinedTextField(value = form.borrowerEmail, onValueChange = { onUpdateForm(form.copy(borrowerEmail = it)) }, label = { Text("Email") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                        OutlinedTextField(value = form.borrowerPhone, onValueChange = { onUpdateForm(form.copy(borrowerPhone = it)) }, label = { Text("Phone") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                        OutlinedTextField(value = form.borrowerEmail, onValueChange = { onUpdateForm(form.copy(borrowerEmail = it)) }, label = { Text("Email") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                     }
-                    OutlinedTextField(value = form.borrowerAddress, onValueChange = { onUpdateForm(form.copy(borrowerAddress = it)) }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true)
+                    OutlinedTextField(value = form.borrowerAddress, onValueChange = { onUpdateForm(form.copy(borrowerAddress = it)) }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
                 }
 
                 // Lending Details
@@ -350,42 +410,38 @@ private fun AddEditLendingModal(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AttachMoney, null, tint = Color(0xFF111827), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Lending Details", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Lending Details", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        var typeExpanded by remember { mutableStateOf(false) }
-                        Box(Modifier.weight(1f)) {
-                            OutlinedTextField(value = if(form.lendingType=="qard-hasan") "Qard Hasan" else "Conventional", onValueChange = {}, readOnly = true, label = { Text("Lending Type *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                            Box(Modifier.matchParentSize().clickable { typeExpanded = true })
-                            DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Qard Hasan") }, onClick = { onUpdateForm(form.copy(lendingType = "qard-hasan")); typeExpanded = false })
-                                DropdownMenuItem(text = { Text("Conventional") }, onClick = { onUpdateForm(form.copy(lendingType = "conventional")); typeExpanded = false })
-                            }
-                        }
-                        var catExpanded by remember { mutableStateOf(false) }
-                        Box(Modifier.weight(1f)) {
-                            OutlinedTextField(value = form.category.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true, label = { Text("Category") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                            Box(Modifier.matchParentSize().clickable { catExpanded = true })
-                            DropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
-                                listOf("personal", "business", "emergency", "other").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm(form.copy(category = t)); catExpanded = false }) }
-                            }
-                        }
+                        AppDropdownPair(
+                            label = "Lending Type *",
+                            selectedValue = form.lendingType,
+                            options = listOf(Pair("qard-hasan", "Qard Hasan"), Pair("conventional", "Conventional")),
+                            onSelect = { t: String -> onUpdateForm(form.copy(lendingType = t)) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppDropdown(
+                            label = "Category",
+                            value = form.category.replaceFirstChar { it.uppercase() },
+                            options = listOf("Personal", "Business", "Emergency", "Other"),
+                            onSelect = { c: String -> onUpdateForm(form.copy(category = c.lowercase())) },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
-                    OutlinedTextField(value = form.principalAmount, onValueChange = { onUpdateForm(form.copy(principalAmount = it)) }, label = { Text("Principal Amount (৳) *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                    OutlinedTextField(value = form.principalAmount, onValueChange = { onUpdateForm(form.copy(principalAmount = it)) }, label = { Text("Principal Amount (৳) *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
 
-                    var accExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedTextField(value = accounts.find { it.id == form.accountId }?.name ?: "Select account", onValueChange = {}, readOnly = true, label = { Text("From Account") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                        Box(Modifier.matchParentSize().clickable { accExpanded = true })
-                        DropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false }) {
-                            accounts.forEach { a -> DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm(form.copy(accountId = a.id)); accExpanded = false }) }
-                        }
-                    }
+                    AppDropdownPair(
+                        label = "From Account",
+                        selectedValue = form.accountId,
+                        options = accounts.map { Pair(it.id, "${it.name} (৳${it.balance})") },
+                        onSelect = { a: String -> onUpdateForm(form.copy(accountId = a)) },
+                        enabled = form.id == null
+                    )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DateSelectionField(label = "Lending Date *", dateString = form.lendingDate, onDateSelected = { onUpdateForm(form.copy(lendingDate = it)) }, modifier = Modifier.weight(1f))
-                        DateSelectionField(label = "Due Date *", dateString = form.dueDate, onDateSelected = { onUpdateForm(form.copy(dueDate = it)) }, modifier = Modifier.weight(1f))
+                        DateSelectionField(label = "Lending Date *", dateString = form.lendingDate, onDateSelected = { d: String -> onUpdateForm(form.copy(lendingDate = d)) }, modifier = Modifier.weight(1f))
+                        DateSelectionField(label = "Due Date *", dateString = form.dueDate, onDateSelected = { d: String -> onUpdateForm(form.copy(dueDate = d)) }, modifier = Modifier.weight(1f))
                     }
                 }
 
@@ -394,7 +450,7 @@ private fun AddEditLendingModal(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CalendarToday, null, tint = Color(0xFF111827), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Repayment Settings", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Repayment Settings", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val isFull = form.repaymentType == "full-payment"
@@ -407,17 +463,16 @@ private fun AddEditLendingModal(
                     }
 
                     if (form.repaymentType == "installments") {
-                        OutlinedTextField(value = form.installmentAmount, onValueChange = { onUpdateForm(form.copy(installmentAmount = it)) }, label = { Text("Installment Amount (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                        OutlinedTextField(value = form.installmentAmount, onValueChange = { onUpdateForm(form.copy(installmentAmount = it)) }, label = { Text("Installment Amount (৳)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            var freqExpanded by remember { mutableStateOf(false) }
-                            Box(Modifier.weight(1f)) {
-                                OutlinedTextField(value = form.installmentFrequency.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true, label = { Text("Frequency") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                                Box(Modifier.matchParentSize().clickable { freqExpanded = true })
-                                DropdownMenu(expanded = freqExpanded, onDismissRequest = { freqExpanded = false }) {
-                                    listOf("weekly", "monthly").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm(form.copy(installmentFrequency = t)); freqExpanded = false }) }
-                                }
-                            }
-                            OutlinedTextField(value = form.totalInstallments, onValueChange = { onUpdateForm(form.copy(totalInstallments = it)) }, label = { Text("Total Installments") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                            AppDropdown(
+                                label = "Frequency",
+                                value = form.installmentFrequency.replaceFirstChar { it.uppercase() },
+                                options = listOf("Weekly", "Monthly"),
+                                onSelect = { f: String -> onUpdateForm(form.copy(installmentFrequency = f.lowercase())) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(value = form.totalInstallments, onValueChange = { onUpdateForm(form.copy(totalInstallments = it)) }, label = { Text("Total Installments") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                         }
                     }
                 }
@@ -427,15 +482,15 @@ private fun AddEditLendingModal(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.People, null, tint = Color(0xFF111827), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Witnesses (Islamic Requirement)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Witnesses (Islamic Requirement)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(value = form.witness1Name, onValueChange = { onUpdateForm(form.copy(witness1Name = it)) }, label = { Text("W1 Name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true)
-                        OutlinedTextField(value = form.witness1Contact, onValueChange = { onUpdateForm(form.copy(witness1Contact = it)) }, label = { Text("W1 Contact") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true)
+                        OutlinedTextField(value = form.witness1Name, onValueChange = { onUpdateForm(form.copy(witness1Name = it)) }, label = { Text("W1 Name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
+                        OutlinedTextField(value = form.witness1Contact, onValueChange = { onUpdateForm(form.copy(witness1Contact = it)) }, label = { Text("W1 Contact") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(value = form.witness2Name, onValueChange = { onUpdateForm(form.copy(witness2Name = it)) }, label = { Text("W2 Name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true)
-                        OutlinedTextField(value = form.witness2Contact, onValueChange = { onUpdateForm(form.copy(witness2Contact = it)) }, label = { Text("W2 Contact") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), singleLine = true)
+                        OutlinedTextField(value = form.witness2Name, onValueChange = { onUpdateForm(form.copy(witness2Name = it)) }, label = { Text("W2 Name") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
+                        OutlinedTextField(value = form.witness2Contact, onValueChange = { onUpdateForm(form.copy(witness2Contact = it)) }, label = { Text("W2 Contact") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
                     }
                 }
 
@@ -444,24 +499,24 @@ private fun AddEditLendingModal(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Notifications, null, tint = Color(0xFF111827), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Reminders", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Reminders", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = form.enableReminders, onCheckedChange = { onUpdateForm(form.copy(enableReminders = it)) })
                         Text("Enable payment reminders", fontSize = 13.sp, color = Color(0xFF374151))
                     }
                     if (form.enableReminders) {
-                        OutlinedTextField(value = form.reminderDaysBefore, onValueChange = { onUpdateForm(form.copy(reminderDaysBefore = it)) }, label = { Text("Remind before (days)") }, modifier = Modifier.fillMaxWidth(0.5f), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                        OutlinedTextField(value = form.reminderDaysBefore, onValueChange = { onUpdateForm(form.copy(reminderDaysBefore = it)) }, label = { Text("Remind before (days)") }, modifier = Modifier.fillMaxWidth(0.5f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                     }
                 }
 
-                OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Additional Notes") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 2)
+                OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Additional Notes") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), maxLines = 2)
             }
 
             HorizontalDivider()
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
-                Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
+                Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))) {
                     if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") }
                     else Text(if(form.id != null) "Update Record" else "Create Record")
                 }
@@ -473,49 +528,48 @@ private fun AddEditLendingModal(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PaymentModal(
-    form: LendingPaymentForm, lending: Lending, isSaving: Boolean,
+    form: LendingPaymentForm, lending: Lending, accounts: List<LendingAccount>, isSaving: Boolean,
     onUpdateForm: (LendingPaymentForm) -> Unit, onDismiss: () -> Unit, onSave: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 36.dp)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), containerColor = Color.White) {
+        Column(Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Record Payment", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
+                Text("Record Repayment", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
             }
             HorizontalDivider()
 
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Surface(color = Color(0xFFF9FAFB), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(lending.borrowerName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                        Text("Remaining: ৳${CurrencyFormatter.formatBDT(lending.remainingBalance)}", fontSize = 11.sp, color = Color(0xFF6B7280))
+                        Text(lending.borrowerName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Remaining: ৳${CurrencyFormatter.formatBDT(lending.remainingBalance)}", fontSize = 12.sp, color = Color(0xFF6B7280))
                     }
                 }
 
                 OutlinedTextField(
                     value = form.amount, onValueChange = { onUpdateForm(form.copy(amount = it)) },
-                    label = { Text("Payment Amount (৳) *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
+                    label = { Text("Payment Amount (৳) *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
                 )
 
-                DateSelectionField(label = "Payment Date *", dateString = form.paymentDate, onDateSelected = { onUpdateForm(form.copy(paymentDate = it)) })
+                DateSelectionField(label = "Payment Date *", dateString = form.paymentDate, onDateSelected = { d: String -> onUpdateForm(form.copy(paymentDate = d)) })
 
-                var methodExpanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedTextField(value = form.paymentMethod.replaceFirstChar { it.uppercase() }.replace("-", " "), onValueChange = {}, readOnly = true, label = { Text("Payment Method *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                    Box(Modifier.matchParentSize().clickable { methodExpanded = true })
-                    DropdownMenu(expanded = methodExpanded, onDismissRequest = { methodExpanded = false }) {
-                        listOf("cash", "bank-transfer", "mobile-wallet", "cheque").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }.replace("-", " ")) }, onClick = { onUpdateForm(form.copy(paymentMethod = t)); methodExpanded = false }) }
-                    }
-                }
+                AppDropdownPair(
+                    label = "Payment Method *",
+                    selectedValue = form.paymentMethod,
+                    options = listOf(Pair("cash", "Cash"), Pair("bank-transfer", "Bank Transfer"), Pair("mobile-wallet", "Mobile Wallet"), Pair("cheque", "Cheque")),
+                    onSelect = { m: String -> onUpdateForm(form.copy(paymentMethod = m)) }
+                )
 
-                OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Notes") }, placeholder = { Text("Monthly installment...") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true)
+                OutlinedTextField(value = form.notes, onValueChange = { onUpdateForm(form.copy(notes = it)) }, label = { Text("Notes") }, placeholder = { Text("Monthly installment...") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
+            }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
-                    Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))) {
-                        if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") }
-                        else Text("Record Payment")
-                    }
+            HorizontalDivider()
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
+                Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))) {
+                    if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Processing...") }
+                    else Text("Record Payment", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -528,25 +582,25 @@ private fun ReminderModal(
     message: String, lending: Lending,
     onMessageChange: (String) -> Unit, onDismiss: () -> Unit, onSend: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 36.dp)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), containerColor = Color.White) {
+        Column(Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Send Payment Reminder", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
+                Text("Send Payment Reminder", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
             }
             HorizontalDivider()
 
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
-                        Text("To: ${lending.borrowerName}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
-                        Text(lending.borrowerContact.phone, fontSize = 11.sp, color = Color(0xFF1D4ED8))
+                        Text("To: ${lending.borrowerName}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                        Text(lending.borrowerContact.phone, fontSize = 12.sp, color = Color(0xFF1D4ED8))
                     }
                 }
 
                 OutlinedTextField(
                     value = message, onValueChange = onMessageChange,
-                    label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), maxLines = 4
+                    label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), maxLines = 4
                 )
 
                 Surface(color = Color(0xFFFFFBEB), border = BorderStroke(1.dp, Color(0xFFFDE68A)), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -554,12 +608,13 @@ private fun ReminderModal(
                         Text("Note: This will log a reminder record in the system. External API integration is required for actual SMS/WhatsApp dispatch.", fontSize = 11.sp, color = Color(0xFF92400E))
                     }
                 }
+            }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp)) { Text("Cancel") }
-                    Button(onClick = onSend, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
-                        Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Log Reminder")
-                    }
+            HorizontalDivider()
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
+                Button(onClick = onSend, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Log Reminder", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -579,7 +634,7 @@ private fun DateSelectionField(label: String, dateString: String, onDateSelected
     )
 
     Box(modifier = modifier) {
-        OutlinedTextField(value = dateString, onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), singleLine = true, trailingIcon = { Icon(Icons.Default.CalendarToday, null) })
+        OutlinedTextField(value = dateString, onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true, trailingIcon = { Icon(Icons.Default.CalendarToday, null) })
         Box(modifier = Modifier.matchParentSize().clickable { showPicker = true })
     }
 

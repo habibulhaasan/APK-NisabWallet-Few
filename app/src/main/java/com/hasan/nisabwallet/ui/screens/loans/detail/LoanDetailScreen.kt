@@ -5,14 +5,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
+import androidx.compose.foundation.border
 import java.util.*
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -132,8 +129,8 @@ fun LoanDetailScreen(
                             }
                             Spacer(Modifier.width(16.dp))
                             Column {
-                                Text(loan.lenderName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                Text(if (isQard) "Interest-free loan (Qard Hasan)" else "${loan.interestRate}% Annual Interest", fontSize = 13.sp, color = Color(0xFF4B5563))
+                                Text(loan.lenderName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(if (isQard) "Interest-free loan (Qard Hasan)" else "${loan.interestRate}% Annual Interest", fontSize = 13.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (loan.status == "paid-off") {
                                     Surface(shape = RoundedCornerShape(50), color = Color(0xFFDBEAFE), modifier = Modifier.padding(top = 8.dp)) {
                                         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -163,20 +160,28 @@ fun LoanDetailScreen(
                         }
                         LinearProgressIndicator(progress = { loan.progress / 100f }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(12.dp).clip(RoundedCornerShape(6.dp)), color = accent, trackColor = Color(0xFFE5E7EB))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Paid: ৳${CurrencyFormatter.formatBDT(loan.totalPaid)}", fontSize = 11.sp, color = Color(0xFF4B5563))
-                            Text("Remaining: ৳${CurrencyFormatter.formatBDT(loan.remainingBalance)}", fontSize = 11.sp, color = Color(0xFF4B5563))
+                            Text("Paid: ৳${CurrencyFormatter.formatBDT(loan.totalPaid)}", fontSize = 11.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text("Remaining: ৳${CurrencyFormatter.formatBDT(loan.remainingBalance)}", fontSize = 11.sp, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                         }
                     }
                 }
             }
 
-            // 4-Grid Stats
+            // 4-Grid Stats (Fixed Grid Simulator)
             item {
-                FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatBox("Principal Amount", Icons.Default.AttachMoney, fmt(loan.principalAmount), Modifier.weight(1f, false).fillMaxWidth(0.48f))
-                    StatBox("Interest Rate", Icons.Default.Percent, if (isQard) "0%" else "${loan.interestRate}%", Modifier.weight(1f, false).fillMaxWidth(0.48f), sub = if (isQard) "Qard Hasan" else "Annual")
-                    StatBox("Total Paid", Icons.AutoMirrored.Filled.TrendingDown, fmt(loan.totalPaid), Modifier.weight(1f, false).fillMaxWidth(0.48f), valColor = Color(0xFF16A34A))
-                    StatBox("Monthly Payment", Icons.Default.CalendarToday, loan.monthlyPayment?.let { fmt(it) } ?: "Flexible", Modifier.weight(1f, false).fillMaxWidth(0.48f), valColor = Color(0xFF2563EB))
+                val stats = mutableListOf<@Composable () -> Unit>()
+                stats.add { StatBox("Principal Amount", Icons.Default.AttachMoney, fmt(loan.principalAmount), Modifier.fillMaxWidth()) }
+                stats.add { StatBox("Interest Rate", Icons.Default.Percent, if (isQard) "0%" else "${loan.interestRate}%", Modifier.fillMaxWidth(), sub = if (isQard) "Qard Hasan" else "Annual") }
+                stats.add { StatBox("Total Paid", Icons.AutoMirrored.Filled.TrendingDown, fmt(loan.totalPaid), Modifier.fillMaxWidth(), valColor = Color(0xFF16A34A)) }
+                stats.add { StatBox("Monthly Payment", Icons.Default.CalendarToday, loan.monthlyPayment?.let { fmt(it) } ?: "Flexible", Modifier.fillMaxWidth(), valColor = Color(0xFF2563EB)) }
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (i in stats.indices step 2) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            Box(Modifier.weight(1f)) { stats[i]() }
+                            if (i + 1 < stats.size) Box(Modifier.weight(1f)) { stats[i + 1]() } else Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
             }
 
@@ -340,8 +345,8 @@ fun LoanDetailScreen(
                                             Text(fmt(p.amount), modifier = Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), textAlign = TextAlign.End)
                                             Text(fmt(p.principalPaid), modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFF16A34A), textAlign = TextAlign.End)
                                             Text(fmt(p.interestPaid), modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFFD97706), textAlign = TextAlign.End)
-                                            Text(accName, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF374151))
-                                            Text(p.notes.ifBlank { "-" }, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF6B7280))
+                                            Text(accName, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF374151), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(p.notes.ifBlank { "-" }, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                     }
                                 }
@@ -361,18 +366,18 @@ private fun StatBox(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Color(0xFF6B7280), modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
-            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280))
+            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = valColor, modifier = Modifier.padding(top = 8.dp))
-        if (sub != null) Text(sub, fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp))
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = valColor, modifier = Modifier.padding(top = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (sub != null) Text(sub, fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun DetailRow(label: String, value: String, valColor: Color = Color(0xFF111827)) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, color = Color(0xFF4B5563))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valColor)
+        Text(label, fontSize = 13.sp, color = Color(0xFF4B5563), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valColor, textAlign = TextAlign.End, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     HorizontalDivider(color = Color(0xFFF3F4F6))
 }

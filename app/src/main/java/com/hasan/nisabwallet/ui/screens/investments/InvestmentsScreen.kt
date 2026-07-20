@@ -2,7 +2,6 @@ package com.hasan.nisabwallet.ui.screens.investments
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,12 +41,22 @@ import java.util.TimeZone
 @Composable
 fun InvestmentsScreen(
     viewModel: InvestmentsViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {},
     onNavigateBack: () -> Unit,
     onNavigateToDetail: (String) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
+
+    // ─── Dynamic FAB Trigger ───
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.openAddModal()
+            onAddHandled()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -77,14 +86,12 @@ fun InvestmentsScreen(
                     ) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp).padding(end = 8.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color(0xFF111827))
-                                }
+                                Spacer(modifier = Modifier.width(56.dp)) // Drawer padding
                                 Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Investment Portfolio", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             }
-                            Text("Track your investments and monitor returns", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 32.dp))
+                            Text("Track your investments and monitor returns", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 88.dp))
                         }
                     }
                 }
@@ -219,9 +226,10 @@ fun InvestmentsScreen(
                                     singleLine = true, shape = RoundedCornerShape(8.dp)
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterDropdown(label = "Type", value = state.filterType, options = listOf("all" to "All Types") + InvestmentConstants.TYPES.map { it to InvestmentConstants.getLabel(it) }, onSelect = { viewModel.setFilterType(it) }, modifier = Modifier.weight(1f))
-                                    FilterDropdown(label = "Status", value = state.filterStatus, options = listOf("all" to "All Status", "active" to "Active", "matured" to "Matured", "sold" to "Sold", "closed" to "Closed"), onSelect = { viewModel.setFilterStatus(it) }, modifier = Modifier.weight(1f))
-                                    FilterDropdown(label = "Sort", value = state.sortBy, options = listOf("date" to "Date", "return" to "Return %", "value" to "Current Value"), onSelect = { viewModel.setSortBy(it) }, modifier = Modifier.weight(1f))
+                                    val typeOpts = listOf("all" to "All Types") + InvestmentConstants.TYPES.map { it to InvestmentConstants.getLabel(it) }
+                                    AppDropdownPair("Type", state.filterType, typeOpts, { t: String -> viewModel.setFilterType(t) }, Modifier.weight(1f))
+                                    AppDropdownPair("Status", state.filterStatus, listOf("all" to "All Status", "active" to "Active", "matured" to "Matured", "sold" to "Sold", "closed" to "Closed"), { s: String -> viewModel.setFilterStatus(s) }, Modifier.weight(1f))
+                                    AppDropdownPair("Sort", state.sortBy, listOf("date" to "Date", "return" to "Return %", "value" to "Current Value"), { s: String -> viewModel.setSortBy(s) }, Modifier.weight(1f))
                                 }
                             }
                         }
@@ -260,14 +268,53 @@ fun InvestmentsScreen(
     }
 }
 
+// ─── Private Dropdown Helpers (Isolated to this file) ───
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdown(
+    label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { opt -> DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false }) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdownPair(
+    label: String, selectedValue: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = options.find { it.first == selectedValue }?.second ?: "Select"
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = display, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { (id, text) -> DropdownMenuItem(text = { Text(text) }, onClick = { onSelect(id); expanded = false }) }
+        }
+    }
+}
+
 @Composable
 private fun SummaryCard(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    value: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    valueColor: Color = Color(0xFF111827)
+    title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, modifier: Modifier = Modifier,
+    subtitle: String? = null, valueColor: Color = Color(0xFF111827)
 ) {
     Card(
         modifier = modifier, shape = RoundedCornerShape(12.dp),
@@ -282,37 +329,6 @@ private fun SummaryCard(
             Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = valueColor)
             if (subtitle != null) {
                 Text(subtitle, fontSize = 11.sp, color = valueColor, fontWeight = FontWeight.Medium)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilterDropdown(
-    label: String,
-    value: String,
-    options: List<Pair<String, String>>,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val display = options.find { it.first == value }?.second ?: label
-    Box(modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
-            shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFD1D5DB)), color = Color.White
-        ) {
-            Row(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text(label, fontSize = 9.sp, color = Color(0xFF6B7280))
-                    Text(display, fontSize = 11.sp, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (k, v) ->
-                DropdownMenuItem(text = { Text(v, fontSize = 13.sp) }, onClick = { onSelect(k); expanded = false })
             }
         }
     }
@@ -392,7 +408,7 @@ private fun AddEditInvestmentModal(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = Color.White
     ) {
-        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
+        Column(modifier = Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
             // Header
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(if (form.id != null) "Edit Investment" else "Add Investment", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -402,46 +418,28 @@ private fun AddEditInvestmentModal(
 
             // Form Content
             Column(
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Type Dropdown
-                var typeExpanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedTextField(
-                        value = InvestmentConstants.getLabel(form.type), onValueChange = {}, readOnly = true,
-                        label = { Text("Investment Type *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) }, enabled = form.id == null
-                    )
-                    if (form.id == null) {
-                        Box(modifier = Modifier.matchParentSize().clickable { typeExpanded = true })
-                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            InvestmentConstants.TYPES.forEach { t ->
-                                DropdownMenuItem(text = { Text(InvestmentConstants.getLabel(t)) }, onClick = { onUpdateForm { it.copy(type = t) }; typeExpanded = false })
-                            }
-                        }
-                    }
-                }
+                AppDropdownPair(
+                    label = "Investment Type *",
+                    selectedValue = form.type,
+                    options = InvestmentConstants.TYPES.map { Pair(it, InvestmentConstants.getLabel(it)) },
+                    onSelect = { typeVal: String -> onUpdateForm { it.copy(type = typeVal) } },
+                    enabled = form.id == null
+                )
 
                 OutlinedTextField(value = form.name, onValueChange = { n -> onUpdateForm { it.copy(name = n) } }, label = { Text("Investment Name *") }, placeholder = { Text("Apple Inc., Grameen Bank FDR...") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
 
                 // Account Selection
-                var accExpanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedTextField(
-                        value = accounts.find { it.id == form.accountId }?.name ?: "Select account",
-                        onValueChange = {}, readOnly = true, label = { Text("Fund from Account") },
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-                        enabled = form.id == null // Lock account selection if editing
-                    )
-                    if (form.id == null) {
-                        Box(Modifier.matchParentSize().clickable { accExpanded = true })
-                        DropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false }) {
-                            accounts.forEach { a -> DropdownMenuItem(text = { Text("${a.name} (৳${a.balance})") }, onClick = { onUpdateForm { it.copy(accountId = a.id) }; accExpanded = false }) }
-                        }
-                    }
-                }
+                AppDropdownPair(
+                    label = "Fund from Account",
+                    selectedValue = form.accountId,
+                    options = accounts.map { Pair(it.id, "${it.name} (৳${it.balance})") },
+                    onSelect = { accId: String -> onUpdateForm { it.copy(accountId = accId) } },
+                    enabled = form.id == null
+                )
 
                 // Type Specific Fields
                 when (form.type) {
@@ -483,19 +481,12 @@ private fun AddEditInvestmentModal(
                     }
                     InvestmentConstants.REAL_ESTATE -> {
                         OutlinedTextField(value = form.address, onValueChange = { v -> onUpdateForm { it.copy(address = v) } }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
-                        var propExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            OutlinedTextField(
-                                value = form.propertyType.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true,
-                                label = { Text("Property Type") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) }
-                            )
-                            Box(modifier = Modifier.matchParentSize().clickable { propExpanded = true })
-                            DropdownMenu(expanded = propExpanded, onDismissRequest = { propExpanded = false }) {
-                                listOf("residential", "commercial", "land", "apartment").forEach { t ->
-                                    DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm { it.copy(propertyType = t) }; propExpanded = false })
-                                }
-                            }
-                        }
+                        AppDropdown(
+                            label = "Property Type",
+                            value = form.propertyType.replaceFirstChar { it.uppercase() },
+                            options = listOf("Residential", "Commercial", "Land", "Apartment"),
+                            onSelect = { t: String -> onUpdateForm { it.copy(propertyType = t.lowercase()) } }
+                        )
                     }
                 }
 
@@ -512,33 +503,28 @@ private fun AddEditInvestmentModal(
 
                 // Metadata Status Dropdowns
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    var statusExpanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(value = form.status.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true, label = { Text("Status") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                        Box(modifier = Modifier.matchParentSize().clickable { statusExpanded = true })
-                        DropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
-                            listOf("active", "matured", "sold", "closed").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm { it.copy(status = t) }; statusExpanded = false }) }
-                        }
-                    }
-
-                    var catExpanded by remember { mutableStateOf(false) }
-                    Box(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(value = form.category.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true, label = { Text("Category") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                        Box(modifier = Modifier.matchParentSize().clickable { catExpanded = true })
-                        DropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
-                            listOf("growth", "income", "safe", "speculative").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm { it.copy(category = t) }; catExpanded = false }) }
-                        }
-                    }
+                    AppDropdown(
+                        label = "Status",
+                        value = form.status.replaceFirstChar { it.uppercase() },
+                        options = listOf("Active", "Matured", "Sold", "Closed"),
+                        onSelect = { stat: String -> onUpdateForm { it.copy(status = stat.lowercase()) } },
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppDropdown(
+                        label = "Category",
+                        value = form.category.replaceFirstChar { it.uppercase() },
+                        options = listOf("Growth", "Income", "Safe", "Speculative"),
+                        onSelect = { cat: String -> onUpdateForm { it.copy(category = cat.lowercase()) } },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
-                var riskExpanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedTextField(value = form.riskLevel.replaceFirstChar { it.uppercase() }, onValueChange = {}, readOnly = true, label = { Text("Risk Level") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) })
-                    Box(modifier = Modifier.matchParentSize().clickable { riskExpanded = true })
-                    DropdownMenu(expanded = riskExpanded, onDismissRequest = { riskExpanded = false }) {
-                        listOf("low", "medium", "high").forEach { t -> DropdownMenuItem(text = { Text(t.replaceFirstChar { it.uppercase() }) }, onClick = { onUpdateForm { it.copy(riskLevel = t) }; riskExpanded = false }) }
-                    }
-                }
+                AppDropdown(
+                    label = "Risk Level",
+                    value = form.riskLevel.replaceFirstChar { it.uppercase() },
+                    options = listOf("Low", "Medium", "High"),
+                    onSelect = { risk: String -> onUpdateForm { it.copy(riskLevel = risk.lowercase()) } }
+                )
 
                 OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), maxLines = 3)
             }

@@ -6,10 +6,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -29,12 +31,21 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun CategoriesScreen(
     viewModel: CategoriesViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {},
     onNavigateBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    
     var categoryToDelete by remember { mutableStateOf<CategoryItem?>(null) }
+
+    // ─── Dynamic FAB Trigger ───
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.openAddModal()
+            onAddHandled()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -49,13 +60,13 @@ fun CategoriesScreen(
         containerColor = Color(0xFFF9FAFB)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
+                // Header with Offset Spacer for Left Drawer Toggle
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -64,12 +75,12 @@ fun CategoriesScreen(
                     ) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp).padding(end = 8.dp)) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color(0xFF111827))
-                                }
+                                Spacer(modifier = Modifier.width(56.dp))
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF111827), modifier = Modifier.size(28.dp))
+                                Spacer(Modifier.width(8.dp))
                                 Text("Categories", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             }
-                            Text("Organize your transactions", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 24.dp))
+                            Text("Organize your transactions", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 92.dp))
                         }
                     }
                 }
@@ -94,7 +105,7 @@ fun CategoriesScreen(
                                 Text("Load Defaults", fontSize = 13.sp)
                             }
                         }
-                        
+
                         Button(
                             onClick = { viewModel.openAddModal() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827)),
@@ -126,7 +137,7 @@ fun CategoriesScreen(
                             Spacer(Modifier.width(6.dp))
                             Text("Required — cannot be deleted", fontSize = 11.sp, color = Color(0xFF6B7280))
                         }
-                        
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(shape = RoundedCornerShape(50), color = Color(0xFFEFF6FF), border = BorderStroke(1.dp, Color(0xFFBFDBFE))) {
                                 Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -242,7 +253,7 @@ fun CategoriesScreen(
                             }
                         }
                     }
-                    
+
                     item { Spacer(Modifier.height(40.dp)) }
                 }
             }
@@ -300,7 +311,7 @@ private fun CategoryCard(
     onDelete: (CategoryItem) -> Unit
 ) {
     val catColor = runCatching { Color(android.graphics.Color.parseColor(category.color)) }.getOrDefault(Color.Gray)
-    
+
     val bgColor = if (category.isSystem) Color(0xFFECFDF5).copy(alpha = 0.4f) else Color.Transparent
     val borderColor = if (category.isSystem) Color(0xFFA7F3D0) else Color(0xFFE5E7EB)
 
@@ -337,13 +348,20 @@ private fun CategoryCard(
             }
 
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 40.dp)) {
                     Box(modifier = Modifier.size(28.dp).background(catColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                         Box(modifier = Modifier.size(10.dp).background(catColor, CircleShape))
                     }
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        Text(category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
+                        Text(
+                            text = category.name,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF111827),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         if (category.isRiba) {
                             Surface(color = Color(0xFFFFFBEB), border = BorderStroke(1.dp, Color(0xFFFDE68A)), shape = RoundedCornerShape(50)) {
                                 Text("⚠ RIBA", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
@@ -351,15 +369,15 @@ private fun CategoryCard(
                         }
                     }
                 }
-                
+
                 Spacer(Modifier.height(12.dp))
-                
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     IconButton(onClick = { onEdit(category) }, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.Edit, "Edit", tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
                     }
                     IconButton(
-                        onClick = { onDelete(category) }, 
+                        onClick = { onDelete(category) },
                         enabled = !category.isSystem,
                         modifier = Modifier.size(28.dp)
                     ) {
@@ -367,6 +385,29 @@ private fun CategoryCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdown(
+    label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                disabledContainerColor = Color(0xFFF9FAFB),
+                disabledTextColor = Color(0xFF9CA3AF)
+            ),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { opt -> DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false }) }
         }
     }
 }
@@ -387,110 +428,108 @@ private fun AddEditCategoryModal(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = Color.White
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
+
+            // Header
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(if (form.id != null) "Edit Category" else "Add Category", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, null)
                 }
             }
+            HorizontalDivider()
 
-            if (form.isSystem) {
-                Surface(
-                    color = Color(0xFFECFDF5),
-                    border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Default.Lock, null, tint = Color(0xFF059669), modifier = Modifier.size(16.dp).padding(top = 2.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("This is a system category. You can change the colour but not the name or type.", fontSize = 12.sp, color = Color(0xFF065F46))
+            // Scrollable Content area with Keyboard padding handling
+            Column(
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (form.isSystem) {
+                    Surface(
+                        color = Color(0xFFECFDF5),
+                        border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.Lock, null, tint = Color(0xFF059669), modifier = Modifier.size(16.dp).padding(top = 2.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("This is a system category. You can change the colour but not the name or type.", fontSize = 12.sp, color = Color(0xFF065F46))
+                        }
                     }
                 }
-            }
 
-            OutlinedTextField(
-                value = form.name,
-                onValueChange = { n -> onUpdateForm { it.copy(name = n) } },
-                label = { Text("Name") },
-                placeholder = { Text("e.g. Salary, Groceries") },
-                enabled = !form.isSystem,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    disabledContainerColor = Color(0xFFF9FAFB),
-                    disabledTextColor = Color(0xFF9CA3AF)
-                )
-            )
-
-            var typeExpanded by remember { mutableStateOf(false) }
-            Box {
                 OutlinedTextField(
-                    value = form.type,
-                    onValueChange = {},
-                    readOnly = true,
+                    value = form.name,
+                    onValueChange = { n -> onUpdateForm { it.copy(name = n) } },
+                    label = { Text("Name") },
+                    placeholder = { Text("e.g. Salary, Groceries") },
                     enabled = !form.isSystem,
-                    label = { Text("Type") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
+                    singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         disabledContainerColor = Color(0xFFF9FAFB),
                         disabledTextColor = Color(0xFF9CA3AF)
                     )
                 )
-                if (!form.isSystem) {
-                    Box(modifier = Modifier.matchParentSize().clickable { typeExpanded = true })
-                    DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                        listOf("Income", "Expense").forEach { t ->
-                            DropdownMenuItem(text = { Text(t) }, onClick = { onUpdateForm { it.copy(type = t) }; typeExpanded = false })
+
+                AppDropdown(
+                    label = "Type",
+                    value = form.type,
+                    options = listOf("Income", "Expense"),
+                    onSelect = { selectedType -> onUpdateForm { it.copy(type = selectedType) } },
+                    enabled = !form.isSystem
+                )
+
+                Column {
+                    Text("Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151), modifier = Modifier.padding(bottom = 8.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        colorsList.forEach { hex ->
+                            val c = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color.Gray)
+                            val isSelected = form.color == hex
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f, fill = false).fillMaxWidth(0.18f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(c)
+                                    .then(if (isSelected) Modifier.border(3.dp, Color(0x66000000), RoundedCornerShape(8.dp)) else Modifier)
+                                    .clickable { onUpdateForm { it.copy(color = hex) } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            Column {
-                Text("Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151), modifier = Modifier.padding(bottom = 8.dp))
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Footer
+            HorizontalDivider()
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("Cancel") }
+                Button(
+                    onClick = onSave,
+                    enabled = !isSaving,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))
                 ) {
-                    colorsList.forEach { hex ->
-                        val c = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color.Gray)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f, fill = false).fillMaxWidth(0.18f) // 5 per row roughly
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(c)
-                                .then(if (form.color == hex) Modifier.border(3.dp, Color(0xFF111827), RoundedCornerShape(8.dp)) else Modifier)
-                                .clickable { onUpdateForm { it.copy(color = hex) } }
-                        )
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Saving...", fontSize = 15.sp)
+                    } else {
+                        Text(if (form.id != null) "Update" else "Add Category", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Button(
-                onClick = onSave,
-                enabled = !isSaving,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Saving...", fontSize = 15.sp)
-                } else {
-                    Text(if (form.id != null) "Update Category" else "Add Category", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

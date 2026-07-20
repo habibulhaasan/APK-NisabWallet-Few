@@ -1,5 +1,6 @@
 package com.hasan.nisabwallet.ui.screens.settings
 
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -21,12 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hasan.nisabwallet.navigation.Routes
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -41,6 +44,11 @@ fun SettingsScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var deleteConfirmationInput by remember { mutableStateOf("") }
     var showHistoryExpanded by remember { mutableStateOf(false) }
+
+    // SharedPreferences for Default FAB Option
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("nisab_prefs", Context.MODE_PRIVATE) }
+    var defaultFabRoute by remember { mutableStateOf(prefs.getString("default_fab", Routes.TRANSACTIONS) ?: Routes.TRANSACTIONS) }
 
     val createJsonLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.executeJsonExport(it) }
@@ -72,7 +80,7 @@ fun SettingsScreen(
             // Header
             item {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Settings", fontSize = 24.dp.value.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                    Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                     Text("Manage account instance states and active filters", fontSize = 13.sp, color = Color(0xFF6B7280))
                 }
             }
@@ -227,6 +235,28 @@ fun SettingsScreen(
                             Icon(Icons.Default.Settings, null, tint = Color(0xFF374151), modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("App Preferences", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF111827))
+                        }
+
+                        // Default FAB Action
+                        Column {
+                            Text("Default Quick Action (FAB)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
+                            Spacer(Modifier.height(4.dp))
+                            AppDropdownPair(
+                                label = "Default Action",
+                                selectedValue = defaultFabRoute,
+                                options = listOf(
+                                    Pair(Routes.TRANSACTIONS, "New Transaction"),
+                                    Pair(Routes.JEWELLERY, "Add Jewellery"),
+                                    Pair(Routes.LOANS, "Add Loan Record"),
+                                    Pair(Routes.LENDINGS, "Add Lending Record"),
+                                    Pair(Routes.INVESTMENTS, "Add Investment")
+                                ),
+                                onSelect = { route ->
+                                    defaultFabRoute = route
+                                    prefs.edit().putString("default_fab", route).apply()
+                                }
+                            )
+                            Text("This is the default '+' button action globally.", fontSize = 11.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 4.dp))
                         }
 
                         // Theme
@@ -519,5 +549,27 @@ fun SettingsScreen(
                 OutlinedButton(onClick = { showDeleteDialog = false; deleteConfirmationInput = "" }) { Text("Cancel") }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdownPair(
+    label: String, selectedValue: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = options.find { it.first == selectedValue }?.second ?: "Select"
+
+    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = display, onValueChange = {}, readOnly = true, label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+            options.forEach { (id, text) -> DropdownMenuItem(text = { Text(text) }, onClick = { onSelect(id); expanded = false }) }
+        }
     }
 }
