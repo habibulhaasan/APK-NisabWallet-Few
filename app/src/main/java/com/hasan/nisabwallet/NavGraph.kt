@@ -69,6 +69,10 @@ import com.hasan.nisabwallet.ui.screens.loans.detail.LoanDetailScreen
 import com.hasan.nisabwallet.ui.screens.lendings.LendingsScreen
 import com.hasan.nisabwallet.ui.screens.lendings.detail.LendingDetailScreen
 import com.hasan.nisabwallet.ui.screens.jewellery.JewelleryScreen
+import com.hasan.nisabwallet.ui.screens.analytics.AnalyticsScreen
+import com.hasan.nisabwallet.ui.screens.cashflow.CashflowScreen
+import com.hasan.nisabwallet.ui.screens.riba.RibaScreen
+import com.hasan.nisabwallet.ui.screens.zakat.ZakatScreen
 
 object Routes {
     const val LOGIN = "login"
@@ -85,6 +89,8 @@ object Routes {
     const val GOALS = "dashboard/goals"
     const val JEWELLERY = "dashboard/jewellery"
     const val ANALYTICS = "dashboard/analytics"
+    const val CASHFLOW = "dashboard/cashflow"
+    const val RIBA = "dashboard/riba"
     const val ZAKAT = "dashboard/zakat"
     const val SUBSCRIPTION = "dashboard/subscription"
 
@@ -102,7 +108,8 @@ object Routes {
 
     val TOP_LEVEL_ROUTES = listOf(
         DASHBOARD, TRANSACTIONS, ACCOUNTS, CATEGORIES, INVESTMENTS,
-        LOANS, LENDINGS, JEWELLERY, SETTINGS, MONTHLY_LEDGER, MONTHLY_GROCERY
+        LOANS, LENDINGS, JEWELLERY, SETTINGS, MONTHLY_LEDGER, MONTHLY_GROCERY,
+        ANALYTICS, CASHFLOW, RIBA, ZAKAT
     )
 }
 
@@ -116,6 +123,8 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Home),
     NavTabItem(Routes.ACCOUNTS, "Accounts", Icons.Default.AccountBalanceWallet),
     NavTabItem(Routes.TRANSACTIONS, "Transactions", Icons.Default.Receipt),
+    NavTabItem(Routes.ANALYTICS, "Analytics", Icons.Default.PieChart),
+    NavTabItem(Routes.CASHFLOW, "Cashflow", Icons.Default.SyncAlt),
     NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
     NavTabItem(Routes.MONTHLY_LEDGER, "Monthly Ledger", Icons.Default.AccountBalance),
     NavTabItem(Routes.MONTHLY_GROCERY, "Monthly Grocery", Icons.Default.ShoppingCart),
@@ -123,7 +132,8 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
     NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
     NavTabItem(Routes.LENDINGS, "Money Lent", Icons.Default.Money),
-    NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite)
+    NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite),
+    NavTabItem(Routes.RIBA, "Riba Tracker", Icons.Default.Warning)
 )
 
 @Composable
@@ -465,8 +475,14 @@ fun NisabWalletNavGraph(
             )
         }
 
-        composable(Routes.TRANSACTIONS) {
-            TransactionsScreen()
+        composable(Routes.TRANSACTIONS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
+            TransactionsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L }
+            )
         }
 
         composable(Routes.MONTHLY_LEDGER) {
@@ -479,8 +495,13 @@ fun NisabWalletNavGraph(
             )
         }
 
-        composable(Routes.MONTHLY_GROCERY) {
+        composable(Routes.MONTHLY_GROCERY) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             MonthlyGroceryScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateToDashboard = {
                     navController.navigate(Routes.DASHBOARD) {
                         popUpTo(Routes.DASHBOARD) { inclusive = true }
@@ -502,46 +523,26 @@ fun NisabWalletNavGraph(
             )
         }
 
-        composable(Routes.ACCOUNTS) { backStackEntry ->
-            val savedStateHandle = backStackEntry.savedStateHandle
-            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
-
+        composable(Routes.ACCOUNTS) {
             AccountsScreen(
-                triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.CATEGORIES) { backStackEntry ->
-            val savedStateHandle = backStackEntry.savedStateHandle
-            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
-
+        composable(Routes.CATEGORIES) {
             CategoriesScreen(
-                triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.JEWELLERY) { backStackEntry ->
-            val savedStateHandle = backStackEntry.savedStateHandle
-            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
-
+        composable(Routes.JEWELLERY) {
             JewelleryScreen(
-                triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.INVESTMENTS) { backStackEntry ->
-            val savedStateHandle = backStackEntry.savedStateHandle
-            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
-
+        composable(Routes.INVESTMENTS) {
             InvestmentsScreen(
-                triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToDetail = { id: String -> navController.navigate(Routes.createInvestmentDetailRoute(id)) }
             )
@@ -553,7 +554,7 @@ fun NisabWalletNavGraph(
         ) {
             InvestmentDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEdit = { id: String -> /* BottomSheet handled internally */ }
+                onNavigateToEdit = { _ -> /* BottomSheet handled internally */ }
             )
         }
 
@@ -563,7 +564,7 @@ fun NisabWalletNavGraph(
 
             LoansScreen(
                 triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToDetail = { id: String -> navController.navigate(Routes.createLoanDetailRoute(id)) }
             )
@@ -575,7 +576,7 @@ fun NisabWalletNavGraph(
         ) {
             LoanDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEdit = { id: String -> navController.popBackStack(Routes.LOANS, false) }
+                onNavigateToEdit = { _ -> navController.popBackStack(Routes.LOANS, false) }
             )
         }
 
@@ -585,7 +586,7 @@ fun NisabWalletNavGraph(
 
             LendingsScreen(
                 triggerFabAdd = trigger,
-                onAddHandled = { savedStateHandle.set("triggerAdd", 0L) },
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToDetail = { id: String -> navController.navigate(Routes.createLendingDetailRoute(id)) }
             )
@@ -601,13 +602,30 @@ fun NisabWalletNavGraph(
         }
 
         composable(Routes.ZAKAT) {
-            com.hasan.nisabwallet.ui.screens.zakat.ZakatScreen()
+            ZakatScreen()
+        }
+
+        composable(Routes.ANALYTICS) {
+            AnalyticsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.CASHFLOW) {
+            CashflowScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.RIBA) {
+            RibaScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         val placeholders = listOf(
             Routes.TRANSFER to "Transfer",
             Routes.GOALS to "Goals",
-            Routes.ANALYTICS to "Analytics",
             Routes.SUBSCRIPTION to "Subscription",
         )
 

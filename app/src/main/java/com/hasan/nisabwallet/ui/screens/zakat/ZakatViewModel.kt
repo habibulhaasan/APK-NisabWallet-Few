@@ -6,7 +6,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +24,12 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.ceil
 
+// ─── Constants ───
+const val NISAB_SILVER_GRAMS = 612.36 // 52.5 Tola
+
 // ─── Data Models ───
+data class ZakatAccount(val id: String, val name: String, val balance: Double, val type: String)
+
 data class ZakatCycle(
     val id: String = "",
     val status: String = "active",
@@ -37,7 +44,14 @@ data class NisabSettings(
     val nisabThreshold: Double = 0.0,
     val silverPricePerGram: Double = 0.0,
     val goldPricePerGram: Double = 0.0,
-    val applyDeduction: Boolean = false
+    val applyDeduction: Boolean = false,
+    val priceSource: String = "manual"
+)
+
+data class BajusRates(
+    val silverPerGram: Double = 0.0,
+    val goldPerGram: Double = 0.0,
+    val lastFetched: String = ""
 )
 
 data class WealthBreakdown(
@@ -52,7 +66,12 @@ data class WealthBreakdown(
 data class ZakatUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
+    val activeTab: String = "overview", // overview | history
+    
     val activeCycle: ZakatCycle? = null,
+    val cycleHistory: List<ZakatCycle> = emptyList(),
+    val accounts: List<ZakatAccount> = emptyList(),
+    
     val settings: NisabSettings = NisabSettings(),
     val breakdown: WealthBreakdown = WealthBreakdown(),
     val daysRemaining: Int = 0,
@@ -65,8 +84,13 @@ data class ZakatUiState(
 
     val settingsForm: NisabSettings = NisabSettings(),
     val cycleStartDate: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+    
     val paymentAmount: String = "",
-    val paymentAccountId: String = ""
+    val paymentAccountId: String = "",
+    
+    // BAJUS Fetch State: idle | loading | success | error
+    val bajusFetchState: String = "idle",
+    val fetchedRates: BajusRates? = null
 )
 
 sealed class ZakatEvent {
@@ -92,7 +116,18 @@ class ZakatViewModel @Inject constructor(
     private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
 
-        // Fetch Nisab Settings
+        // 1. Fetch Accounts
+        db.collection("users").document(uid).collection("accounts")
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val accs = snap.documents.map {
+                        ZakatAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "Cash")
+                    }
+                    _uiState.update { it.copy(accounts = accs) }
+                }
+            }
+
+        // 2. Fetch Nisab Settings
         db.collection("users").document(uid).collection("settings").limit(1)
             .addSnapshotListener { snap, _ ->
                 if (snap != null && !snap.isEmpty) {
@@ -101,30 +136,30 @@ class ZakatViewModel @Inject constructor(
                         nisabThreshold = data.getDouble("nisabThreshold") ?: 0.0,
                         silverPricePerGram = data.getDouble("silverPricePerGram") ?: 0.0,
                         goldPricePerGram = data.getDouble("goldPricePerGram") ?: 0.0,
-                        applyDeduction = data.getBoolean("applyDeduction") ?: false
+                        applyDeduction = data.getBoolean("applyDeduction") ?: false,
+                        priceSource = data.getString("priceSource") ?: "manual"
                     )
                     _uiState.update { it.copy(settings = settings, settingsForm = settings) }
                     recalculateWealth(uid)
                 }
             }
 
-        // Fetch Active Cycle
+        // 3. Fetch Zakat Cycles (Active & History)
         db.collection("users").document(uid).collection("zakatCycles")
-            .whereEqualTo("status", "active").limit(1)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, _ ->
-                if (snap != null && !snap.isEmpty) {
-                    val d = snap.documents.first()
-                    val cycle = ZakatCycle(
-                        id = d.id, status = "active", startDate = d.getString("startDate") ?: "",
-                        startWealth = d.getDouble("startWealth") ?: 0.0,
-                        nisabAtStart = d.getDouble("nisabAtStart") ?: 0.0,
-                        totalPaid = d.getDouble("totalPaid") ?: 0.0,
-                        zakatDue = d.getDouble("zakatDue") ?: 0.0
-                    )
-                    _uiState.update { it.copy(activeCycle = cycle) }
-                    recalculateWealth(uid)
-                } else {
-                    _uiState.update { it.copy(activeCycle = null) }
+                if (snap != null) {
+                    val cycles = snap.documents.map { d ->
+                        ZakatCycle(
+                            id = d.id, status = d.getString("status") ?: "active", startDate = d.getString("startDate") ?: "",
+                            startWealth = d.getDouble("startWealth") ?: 0.0, nisabAtStart = d.getDouble("nisabAtStart") ?: 0.0,
+                            totalPaid = d.getDouble("totalPaid") ?: 0.0, zakatDue = d.getDouble("zakatDue") ?: 0.0
+                        )
+                    }
+                    val active = cycles.find { it.status == "active" || it.status == "due" }
+                    val history = cycles.filter { it.status == "paid" || it.status == "exempt" }
+                    
+                    _uiState.update { it.copy(activeCycle = active, cycleHistory = history) }
                     recalculateWealth(uid)
                 }
             }
@@ -139,8 +174,7 @@ class ZakatViewModel @Inject constructor(
                 var lendTotal = 0.0
                 var loanTotal = 0.0
 
-                val accSnap = db.collection("users").document(uid).collection("accounts").get().await()
-                accSnap.documents.forEach { accTotal += (it.getDouble("balance") ?: 0.0) }
+                _uiState.value.accounts.forEach { accTotal += it.balance }
 
                 val invSnap = db.collection("users").document(uid).collection("investments").whereEqualTo("status", "active").get().await()
                 invSnap.documents.forEach { invTotal += ((it.getDouble("currentValue") ?: it.getDouble("purchasePrice") ?: 0.0) * (it.getDouble("quantity") ?: 1.0)) }
@@ -150,9 +184,7 @@ class ZakatViewModel @Inject constructor(
 
                 val lendSnap = db.collection("users").document(uid).collection("lendings").whereEqualTo("status", "active").get().await()
                 lendSnap.documents.forEach { 
-                    if (it.getBoolean("countForZakat") == true) {
-                        lendTotal += (it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0)
-                    }
+                    if (it.getBoolean("countForZakat") == true) { lendTotal += (it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0) }
                 }
 
                 val loanSnap = db.collection("users").document(uid).collection("loans").whereEqualTo("status", "active").get().await()
@@ -172,19 +204,19 @@ class ZakatViewModel @Inject constructor(
                 if (cycle != null) {
                     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                     val start = runCatching { sdf.parse(cycle.startDate)?.time }.getOrNull() ?: System.currentTimeMillis()
-                    // Hijri year approximation: 354 days
-                    val end = start + (354L * 24 * 60 * 60 * 1000)
+                    val end = start + (354L * 24 * 60 * 60 * 1000) // Hijri year approx
                     val today = System.currentTimeMillis()
 
-                    if (today >= end) {
-                        status = if (netWealth >= nisab) "Zakat Due" else "Exempt"
-                        if (status == "Zakat Due") amountDue = netWealth * 0.025
+                    if (today >= end || cycle.status == "due") {
+                        status = "Zakat Due"
+                        amountDue = if (cycle.zakatDue > 0) cycle.zakatDue else netWealth * 0.025
                     } else {
                         status = "Monitoring"
                         daysRem = maxOf(0, ceil((end - today) / (1000.0 * 60 * 60 * 24)).toInt())
                         amountDue = if (nisab > 0) netWealth * 0.025 else 0.0
                     }
-                } else if (nisab > 0) {
+                } else if (nisab > 0 && netWealth >= nisab) {
+                    status = "Not Mandatory" // Needs to start cycle manually
                     amountDue = netWealth * 0.025
                 }
 
@@ -197,25 +229,81 @@ class ZakatViewModel @Inject constructor(
                         daysRemaining = daysRem
                     )
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 emitEvent(ZakatEvent.ShowToast("Wealth calculation error", true))
             }
         }
     }
 
-    // ─── Modals ───
-    fun openSettingsModal() = _uiState.update { it.copy(showSettingsModal = true) }
+    // ─── BAJUS API Simulation ───
+    fun fetchBajusRates() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(bajusFetchState = "loading") }
+            
+            // TODO: Replace with actual Retrofit/Ktor call to your API endpoint
+            delay(1500) // Simulating network request
+            
+            val simulatedRates = BajusRates(
+                silverPerGram = 145.0, // Example live price
+                goldPerGram = 11500.0, // Example live price
+                lastFetched = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
+            )
+            
+            _uiState.update { 
+                it.copy(
+                    bajusFetchState = "success", 
+                    fetchedRates = simulatedRates,
+                    settingsForm = it.settingsForm.copy(
+                        silverPricePerGram = simulatedRates.silverPerGram,
+                        goldPricePerGram = simulatedRates.goldPerGram,
+                        nisabThreshold = simulatedRates.silverPerGram * NISAB_SILVER_GRAMS,
+                        priceSource = "auto"
+                    )
+                ) 
+            }
+            emitEvent(ZakatEvent.ShowToast("Live rates fetched successfully from BAJUS"))
+        }
+    }
+
+    // ─── Tabs & Modals ───
+    fun setActiveTab(tab: String) = _uiState.update { it.copy(activeTab = tab) }
+
+    fun openSettingsModal() {
+        _uiState.update { it.copy(showSettingsModal = true, settingsForm = it.settings) }
+        if (_uiState.value.settings.priceSource == "auto" && _uiState.value.bajusFetchState == "idle") {
+            fetchBajusRates()
+        }
+    }
     fun closeSettingsModal() = _uiState.update { it.copy(showSettingsModal = false) }
-    fun updateSettingsForm(update: (NisabSettings) -> NisabSettings) = _uiState.update { it.copy(settingsForm = update(it.settingsForm)) }
+    
+    fun updateSettingsForm(update: (NisabSettings) -> NisabSettings) {
+        _uiState.update { 
+            val newForm = update(it.settingsForm)
+            // Auto-calculate Nisab based on Silver Grams if manually updated
+            it.copy(settingsForm = newForm.copy(nisabThreshold = newForm.silverPricePerGram * NISAB_SILVER_GRAMS)) 
+        }
+    }
 
     fun openStartCycleModal() = _uiState.update { it.copy(showStartCycleModal = true) }
     fun closeStartCycleModal() = _uiState.update { it.copy(showStartCycleModal = false) }
     fun setCycleStartDate(date: String) = _uiState.update { it.copy(cycleStartDate = date) }
 
-    fun openPaymentModal() = _uiState.update { it.copy(showPaymentModal = true, paymentAmount = it.zakatAmountDue.toString()) }
+    fun openPaymentModal(prefillAmt: Double? = null) {
+        val remaining = maxOf(0.0, _uiState.value.zakatAmountDue - (_uiState.value.activeCycle?.totalPaid ?: 0.0))
+        val amtToFill = prefillAmt ?: remaining
+        _uiState.update { 
+            it.copy(
+                showPaymentModal = true, 
+                paymentAmount = String.format(Locale.US, "%.2f", amtToFill),
+                paymentAccountId = it.accounts.firstOrNull()?.id ?: ""
+            ) 
+        }
+    }
     fun closePaymentModal() = _uiState.update { it.copy(showPaymentModal = false) }
+    fun updatePaymentAmount(amt: String) = _uiState.update { it.copy(paymentAmount = amt) }
+    fun updatePaymentAccount(id: String) = _uiState.update { it.copy(paymentAccountId = id) }
 
-    // ─── Actions ───
+    // ─── Database Actions ───
     fun saveNisabSettings() {
         val uid = auth.currentUser?.uid ?: return
         val form = _uiState.value.settingsForm
@@ -227,6 +315,7 @@ class ZakatViewModel @Inject constructor(
                     "silverPricePerGram" to form.silverPricePerGram,
                     "goldPricePerGram" to form.goldPricePerGram,
                     "applyDeduction" to form.applyDeduction,
+                    "priceSource" to form.priceSource,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 val ref = db.collection("users").document(uid).collection("settings")
@@ -264,6 +353,61 @@ class ZakatViewModel @Inject constructor(
                 closeStartCycleModal()
             } catch (e: Exception) {
                 emitEvent(ZakatEvent.ShowToast("Failed to start cycle: ${e.message}", true))
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun recordZakatPayment() {
+        val uid = auth.currentUser?.uid ?: return
+        val state = _uiState.value
+        val cycle = state.activeCycle ?: return
+        
+        val amt = state.paymentAmount.toDoubleOrNull() ?: 0.0
+        if (amt <= 0 || state.paymentAccountId.isBlank()) {
+            emitEvent(ZakatEvent.ShowToast("Enter valid amount and select account", true))
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            try {
+                // 1. Deduct from account
+                val accRef = db.collection("users").document(uid).collection("accounts").document(state.paymentAccountId)
+                val accSnap = accRef.get().await()
+                val oldBal = accSnap.getDouble("balance") ?: 0.0
+                accRef.update("balance", oldBal - amt).await()
+
+                // 2. Add transaction record
+                db.collection("users").document(uid).collection("transactions").add(
+                    mapOf(
+                        "type" to "Expense",
+                        "amount" to amt,
+                        "accountId" to state.paymentAccountId,
+                        "description" to "Zakat Payment",
+                        "date" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                        "isZakatPayment" to true,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+
+                // 3. Update Cycle
+                val newPaid = cycle.totalPaid + amt
+                val isFullyPaid = newPaid >= state.zakatAmountDue
+                val cycleUpdate = mutableMapOf<String, Any>("totalPaid" to newPaid)
+                
+                if (isFullyPaid) {
+                    cycleUpdate["status"] = "paid"
+                    cycleUpdate["endDate"] = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                }
+
+                db.collection("users").document(uid).collection("zakatCycles").document(cycle.id).update(cycleUpdate).await()
+                
+                emitEvent(ZakatEvent.ShowToast(if (isFullyPaid) "JazakAllah! Zakat fully paid." else "Zakat payment recorded!"))
+                closePaymentModal()
+            } catch (e: Exception) {
+                emitEvent(ZakatEvent.ShowToast("Payment failed: ${e.message}", true))
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
             }

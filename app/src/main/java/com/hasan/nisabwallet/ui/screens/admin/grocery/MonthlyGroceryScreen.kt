@@ -9,9 +9,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -103,11 +106,20 @@ private fun monthLabelFor(ym: String): String {
 @Composable
 fun MonthlyGroceryScreen(
     viewModel: MonthlyGroceryViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {},
     onNavigateToDashboard: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.openAddItemModal()
+            onAddHandled()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -131,160 +143,158 @@ fun MonthlyGroceryScreen(
 
     if (!state.isAdmin) return
 
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                GroceryHeader(onAddItem = { viewModel.openAddItemModal() })
-            }
-
-            item {
-                GroceryTabs(activeTab = state.activeTab, onSelect = { viewModel.setActiveTab(it) })
-            }
-
-            if (state.activeTab == "planner") {
-                item {
-                    MonthNavRow(
-                        state = state,
-                        onPrev = { viewModel.goPrevMonth() },
-                        onNext = { viewModel.goNextMonth() },
-                        onSave = { viewModel.saveMonth() },
-                    )
-                }
-
-                item {
-                    SummaryPills(state = state, viewModel = viewModel)
-                }
-
-                item {
-                    FilterBar(state = state, viewModel = viewModel)
-                }
-
-                if (state.isLoading) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Emerald600)
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Gray50,
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Gray50, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(modifier = Modifier.width(48.dp)) // Clears the hamburger menu
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Monthly Grocery", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Gray900, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.width(8.dp))
+                            Surface(shape = RoundedCornerShape(50), color = Amber100) {
+                                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = Amber700, modifier = Modifier.size(10.dp))
+                                    Spacer(Modifier.width(3.dp))
+                                    Text("Admin Only", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Amber700)
+                                }
+                            }
                         }
+                        Text("Plan, track and record monthly grocery", fontSize = 12.sp, color = Gray500)
                     }
-                } else if (state.items.isEmpty()) {
-                    item { EmptyState(onAddItem = { viewModel.openAddItemModal() }) }
-                } else {
-                    val filtered = viewModel.filteredRows(state)
-                    if (filtered.isEmpty()) {
-                        item { EmptyHint("No items match your filters.") }
+                }
+            }
+        },
+        floatingActionButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                if (state.activeTab == "planner") {
+                    val recordable = state.rows.count { it.curBought && !it.curRecorded && !it.archived }
+                    if (recordable > 0) {
+                        ExtendedFloatingActionButton(
+                            onClick = { viewModel.openConfirmModal() },
+                            containerColor = Gray900,
+                            contentColor = Color.White,
+                            icon = { Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            text = { Text("Record ($recordable)", fontWeight = FontWeight.SemiBold) },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+                FloatingActionButton(
+                    onClick = { viewModel.openAddItemModal() },
+                    containerColor = Emerald600,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Item")
+                }
+            }
+        }
+    ) { paddingValues ->
+        Box(Modifier.fillMaxSize().padding(paddingValues)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    GroceryTabs(activeTab = state.activeTab, onSelect = { viewModel.setActiveTab(it) })
+                }
+
+                if (state.activeTab == "planner") {
+                    item {
+                        MonthNavRow(
+                            state = state,
+                            onPrev = { viewModel.goPrevMonth() },
+                            onNext = { viewModel.goNextMonth() },
+                            onSave = { viewModel.saveMonth() },
+                        )
+                    }
+
+                    item {
+                        SummaryPills(state = state, viewModel = viewModel)
+                    }
+
+                    item {
+                        FilterBar(state = state, viewModel = viewModel)
+                    }
+
+                    if (state.isLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = Emerald600)
+                            }
+                        }
+                    } else if (state.items.isEmpty()) {
+                        item { EmptyState(onAddItem = { viewModel.openAddItemModal() }) }
                     } else {
-                        val groups = groupRows(filtered, state.expenseCategories)
-                        groups.forEach { group ->
-                            item(key = "cat_${group.catId}") {
-                                CategoryGroupCard(
-                                    group = group,
-                                    onOpenGroupModal = { viewModel.openGroupModal(group.catId) },
-                                    onToggleBought = { viewModel.toggleBought(it) },
-                                    onQtyChange = { id, v -> viewModel.updateRowQty(id, v) },
-                                    onUnitPriceChange = { id, v -> viewModel.updateRowUnitPrice(id, v) },
-                                    onBoughtPriceChange = { id, v -> viewModel.updateRowBoughtPrice(id, v) },
-                                    onEdit = { row ->
-                                        state.items.find { it.id == row.itemId }?.let { viewModel.openEditItemModal(it) }
-                                    },
-                                    onArchive = { viewModel.archiveItem(it) },
-                                    onDelete = { viewModel.deleteItem(it) },
-                                    onReverse = { viewModel.openReverseModal(it) },
-                                )
+                        val filtered = viewModel.filteredRows(state)
+                        if (filtered.isEmpty()) {
+                            item { EmptyHint("No items match your filters.") }
+                        } else {
+                            val groups = groupRows(filtered, state.expenseCategories)
+                            groups.forEach { group ->
+                                item(key = "cat_${group.catId}") {
+                                    CategoryGroupCard(
+                                        group = group,
+                                        onOpenGroupModal = { viewModel.openGroupModal(group.catId) },
+                                        onToggleBought = { viewModel.toggleBought(it) },
+                                        onQtyChange = { id, v -> viewModel.updateRowQty(id, v) },
+                                        onUnitPriceChange = { id, v -> viewModel.updateRowUnitPrice(id, v) },
+                                        onBoughtPriceChange = { id, v -> viewModel.updateRowBoughtPrice(id, v) },
+                                        onEdit = { row ->
+                                            state.items.find { it.id == row.itemId }?.let { viewModel.openEditItemModal(it) }
+                                        },
+                                        onArchive = { viewModel.archiveItem(it) },
+                                        onDelete = { viewModel.deleteItem(it) },
+                                        onReverse = { viewModel.openReverseModal(it) },
+                                    )
+                                }
                             }
                         }
                     }
+
+                    item { Spacer(Modifier.height(100.dp)) } // Extra padding for FAB
+                } else {
+                    item { HistorySection(state = state) }
+                    item { Spacer(Modifier.height(100.dp)) }
                 }
-
-                item { Spacer(Modifier.height(80.dp)) }
-            } else {
-                item { HistorySection(state = state) }
-                item { Spacer(Modifier.height(80.dp)) }
             }
         }
 
-        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
-
-        // Floating action row
-        if (state.activeTab == "planner") {
-            val recordable = state.rows.count { it.curBought && !it.curRecorded && !it.archived }
-            if (recordable > 0) {
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.openConfirmModal() },
-                    containerColor = Gray900,
-                    contentColor = Color.White,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                    icon = { Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    text = { Text("Record ($recordable)", fontWeight = FontWeight.SemiBold) },
-                )
-            }
+        if (state.showAddItemModal) {
+            AddEditItemSheet(
+                state = state,
+                viewModel = viewModel,
+                onDismiss = { viewModel.closeAddItemModal() },
+            )
         }
-    }
 
-    if (state.showAddItemModal) {
-        AddEditItemSheet(
-            state = state,
-            viewModel = viewModel,
-            onDismiss = { viewModel.closeAddItemModal() },
-        )
-    }
+        if (state.showConfirmModal) {
+            ConfirmRecordDialog(state = state, viewModel = viewModel)
+        }
 
-    if (state.showConfirmModal) {
-        ConfirmRecordDialog(state = state, viewModel = viewModel)
-    }
+        if (state.groupModal.show) {
+            GroupPriceSheet(state = state, viewModel = viewModel)
+        }
 
-    if (state.groupModal.show) {
-        GroupPriceSheet(state = state, viewModel = viewModel)
-    }
-
-    if (state.showReverseModal) {
-        ReverseConfirmDialog(
-            onDismiss = { viewModel.closeReverseModal() },
-            onConfirm = { viewModel.reverseRecord() },
-            isReversing = state.isReversing,
-        )
+        if (state.showReverseModal) {
+            ReverseConfirmDialog(
+                onDismiss = { viewModel.closeReverseModal() },
+                onConfirm = { viewModel.reverseRecord() },
+                isReversing = state.isReversing,
+            )
+        }
     }
 }
 
-// ─── Header ─────────────────────────────────────────────────────────────────
-
-@Composable
-private fun GroceryHeader(onAddItem: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Emerald600),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Monthly Grocery", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Gray900)
-                Spacer(Modifier.width(6.dp))
-                Surface(shape = RoundedCornerShape(50), color = Amber100) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.Shield, contentDescription = null, tint = Amber700, modifier = Modifier.size(10.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("Admin Only", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Amber700)
-                    }
-                }
-            }
-            Text("Plan, track and record monthly grocery", fontSize = 11.sp, color = Gray500)
-        }
-        IconButton(
-            onClick = onAddItem,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Emerald600),
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Item", tint = Color.White)
-        }
-    }
-}
+// ─── Tabs ───────────────────────────────────────────────────────────────────
 
 @Composable
 private fun GroceryTabs(activeTab: String, onSelect: (String) -> Unit) {
@@ -904,9 +914,10 @@ private fun AddEditItemSheet(
     onDismiss: () -> Unit,
 ) {
     val isEditing = state.editingItemId != null
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp), containerColor = Color.White) {
+        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
             Text(
                 if (isEditing) "Edit Item" else "Add Grocery Item",
                 fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Gray900,
@@ -1018,7 +1029,7 @@ private fun BulkItemForm(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(
-            modifier = Modifier.heightIn(max = 380.dp),
+            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             rows.forEachIndexed { index, row ->
@@ -1071,12 +1082,12 @@ private fun BulkItemForm(
                     )
                 }
             }
-        }
 
-        OutlinedButton(onClick = onAddRow, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Add Row")
+            OutlinedButton(onClick = onAddRow, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add Row")
+            }
         }
 
         Button(
@@ -1270,9 +1281,10 @@ private fun gray600Text() = Color(0xFF4B5563)
 private fun GroupPriceSheet(state: GroceryUiState, viewModel: MonthlyGroceryViewModel) {
     val modal = state.groupModal
     val members = state.rows.filter { modal.selectedItemIds.contains(it.itemId) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(onDismissRequest = { viewModel.closeGroupModal() }, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+    ModalBottomSheet(onDismissRequest = { viewModel.closeGroupModal() }, sheetState = sheetState, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp), containerColor = Color.White) {
+        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Layers, contentDescription = null, tint = Violet600, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -1301,7 +1313,7 @@ private fun GroupPriceSheet(state: GroceryUiState, viewModel: MonthlyGroceryView
             Spacer(Modifier.height(14.dp))
 
             Column(
-                modifier = Modifier.heightIn(max = 320.dp),
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 members.forEach { row ->

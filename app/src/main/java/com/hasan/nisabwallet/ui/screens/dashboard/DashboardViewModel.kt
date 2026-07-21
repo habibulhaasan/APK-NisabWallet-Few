@@ -11,17 +11,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 import javax.inject.Inject
+import kotlin.math.ceil
+
+data class DashboardAccount(val id: String, val name: String, val balance: Double, val type: String)
 
 data class DashboardUiState(
     val isLoading: Boolean = true,
+    val userName: String = "User",
     val syncStatus: String = "Connecting...",
+    
+    // Balances & Transactions
     val totalBalance: Double = 0.0,
+    val accounts: List<DashboardAccount> = emptyList(),
     val thisMonthIncome: Double = 0.0,
     val thisMonthExpense: Double = 0.0,
     val recentTransactions: List<DashboardTransaction> = emptyList(),
     val categories: Map<String, DashboardCategory> = emptyMap(),
+    
+    // Zakat Status
+    val nisabThreshold: Double = 0.0,
+    val netZakatableWealth: Double = 0.0,
+    val zakatStatus: String = "Not Mandatory",
+    val zakatAmount: Double = 0.0,
+    val zakatProgress: Float = 0f,
+    val daysRemaining: Int = 0,
+    val activeCycleDate: String? = null
 )
 
 data class DashboardTransaction(
@@ -48,130 +66,192 @@ class DashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
-    private var accListener: ListenerRegistration? = null
-    private var txListener: ListenerRegistration? = null
-    private var trListener: ListenerRegistration? = null
-    private var catListener: ListenerRegistration? = null
+    private val listeners = mutableListOf<ListenerRegistration>()
 
-    private var rawTransactions = emptyList<DashboardTransaction>()
-    private var rawTransfers = emptyList<DashboardTransaction>()
+    // Wealth aggregation variables
+    private var accTotal = 0.0
+    private var invTotal = 0.0
+    private var jewTotal = 0.0
+    private var lendTotal = 0.0
+    private var loanTotal = 0.0
+    private var activeCycleDate: String? = null
+    private var activeCycleStatus: String? = null
+    private var activeCycleDue: Double = 0.0
 
     init {
+        val name = auth.currentUser?.displayName?.split(" ")?.firstOrNull() ?: "User"
+        _uiState.update { it.copy(userName = name) }
         startRealTimeSync()
     }
 
     private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
 
-        accListener = db.collection("users").document(uid).collection("accounts")
+        // 1. Accounts
+        listeners.add(db.collection("users").document(uid).collection("accounts")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
-                    val total = snap.documents.sumOf { it.getDouble("balance") ?: 0.0 }
-                    _uiState.update { it.copy(totalBalance = total) }
+                    val accs = snap.documents.map { 
+                        DashboardAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "") 
+                    }
+                    accTotal = accs.sumOf { it.balance }
+                    _uiState.update { it.copy(accounts = accs, totalBalance = accTotal) }
+                    recalculateZakat()
                 }
-            }
+            })
 
-        catListener = db.collection("users").document(uid).collection("categories")
+        // 2. Categories
+        listeners.add(db.collection("users").document(uid).collection("categories")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
                     val catMap = snap.documents.associate { d ->
-                        d.id to DashboardCategory(
-                            name = d.getString("name") ?: "Unknown",
-                            color = d.getString("color") ?: "#6B7280"
-                        )
+                        d.id to DashboardCategory(d.getString("name") ?: "Unknown", d.getString("color") ?: "#6B7280")
                     }
                     _uiState.update { it.copy(categories = catMap) }
                 }
-            }
+            })
 
-        txListener = db.collection("users").document(uid).collection("transactions")
-            .orderBy("date", Query.Direction.DESCENDING)
-            .limit(50)
-            .addSnapshotListener { snap, _ ->
-                if (snap != null) {
-                    val status = when {
-                        snap.metadata.hasPendingWrites() -> "Syncing..."
-                        snap.metadata.isFromCache() -> "Offline (Cached)"
-                        else -> "Synced"
-                    }
-                    rawTransactions = snap.documents.map { d ->
-                        DashboardTransaction(
-                            id = d.id,
-                            type = d.getString("type") ?: "",
-                            amount = d.getDouble("amount") ?: 0.0,
-                            categoryId = d.getString("categoryId") ?: "",
-                            accountId = d.getString("accountId") ?: "",
-                            description = d.getString("description") ?: "",
-                            date = d.getString("date") ?: "",
-                            createdAtMillis = d.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
-                        )
-                    }
-                    combineAndEmit(status)
+        // 3. Transactions & Transfers (Recent & Monthly)
+        setupTransactionListeners(uid)
+
+        // 4. Zakat & Wealth Listeners (Nisab, Investments, Jewellery, Lendings, Loans)
+        setupWealthListeners(uid)
+    }
+
+    private fun setupTransactionListeners(uid: String) {
+        var rawTx = emptyList<DashboardTransaction>()
+        var rawTr = emptyList<DashboardTransaction>()
+
+        val combineTx = { status: String? ->
+            val all = (rawTx + rawTr).sortedWith(compareByDescending<DashboardTransaction> { it.date }.thenByDescending { it.createdAtMillis })
+            val cal = Calendar.getInstance()
+            val year = cal.get(Calendar.YEAR)
+            val month = cal.get(Calendar.MONTH) + 1
+            val start = "%04d-%02d-01".format(year, month)
+            val end = "%04d-%02d-%02d".format(year, month, cal.apply { set(year, month - 1, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH))
+
+            var inc = 0.0; var exp = 0.0
+            all.forEach { tx ->
+                if (!tx.isTransfer && tx.date in start..end) {
+                    if (tx.type == "Income") inc += tx.amount
+                    if (tx.type == "Expense") exp += tx.amount
                 }
             }
 
-        trListener = db.collection("users").document(uid).collection("transfers")
-            .orderBy("date", Query.Direction.DESCENDING)
-            .limit(20)
+            _uiState.update { it.copy(isLoading = false, recentTransactions = all.take(8), thisMonthIncome = inc, thisMonthExpense = exp, syncStatus = status ?: it.syncStatus) }
+        }
+
+        listeners.add(db.collection("users").document(uid).collection("transactions").orderBy("date", Query.Direction.DESCENDING).limit(50)
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
-                    val expanded = mutableListOf<DashboardTransaction>()
+                    val status = if (snap.metadata.hasPendingWrites()) "Syncing..." else if (snap.metadata.isFromCache()) "Offline" else "Synced"
+                    rawTx = snap.documents.map { d ->
+                        DashboardTransaction(d.id, d.getString("type") ?: "", d.getDouble("amount") ?: 0.0, d.getString("categoryId") ?: "", d.getString("accountId") ?: "", d.getString("description") ?: "", d.getString("date") ?: "", false, null, d.getTimestamp("createdAt")?.toDate()?.time ?: 0L)
+                    }
+                    combineTx(status)
+                }
+            })
+
+        listeners.add(db.collection("users").document(uid).collection("transfers").orderBy("date", Query.Direction.DESCENDING).limit(20)
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val exp = mutableListOf<DashboardTransaction>()
                     snap.documents.forEach { t ->
                         val amt = t.getDouble("amount") ?: 0.0
                         val date = t.getString("date") ?: ""
                         val ts = t.getTimestamp("createdAt")?.toDate()?.time ?: 0L
-
-                        expanded.add(DashboardTransaction(
-                            id = "${t.id}-exp", isTransfer = true, type = "Expense", amount = amt,
-                            date = date, createdAtMillis = ts, relatedAccountName = t.getString("toAccountName")
-                        ))
-                        expanded.add(DashboardTransaction(
-                            id = "${t.id}-inc", isTransfer = true, type = "Income", amount = amt,
-                            date = date, createdAtMillis = ts, relatedAccountName = t.getString("fromAccountName")
-                        ))
+                        exp.add(DashboardTransaction("${t.id}-exp", "Expense", amt, "", "", "", date, true, t.getString("toAccountName"), ts))
+                        exp.add(DashboardTransaction("${t.id}-inc", "Income", amt, "", "", "", date, true, t.getString("fromAccountName"), ts))
                     }
-                    rawTransfers = expanded
-                    combineAndEmit(null)
+                    rawTr = exp
+                    combineTx(null)
                 }
-            }
+            })
     }
 
-    private fun combineAndEmit(newSyncStatus: String?) {
-        val all = (rawTransactions + rawTransfers).sortedWith(
-            compareByDescending<DashboardTransaction> { it.date }.thenByDescending { it.createdAtMillis }
-        )
+    private fun setupWealthListeners(uid: String) {
+        listeners.add(db.collection("users").document(uid).collection("settings").limit(1).addSnapshotListener { snap, _ ->
+            if (snap != null && !snap.isEmpty) {
+                _uiState.update { it.copy(nisabThreshold = snap.documents.first().getDouble("nisabThreshold") ?: 0.0) }
+                recalculateZakat()
+            }
+        })
 
-        val cal = Calendar.getInstance()
-        val year = cal.get(Calendar.YEAR)
-        val month = cal.get(Calendar.MONTH) + 1
-        val start = "%04d-%02d-01".format(year, month)
-        val end = "%04d-%02d-%02d".format(year, month, cal.apply { set(year, month - 1, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH))
+        listeners.add(db.collection("users").document(uid).collection("zakatCycles").whereEqualTo("status", "active").limit(1).addSnapshotListener { snap, _ ->
+            if (snap != null && !snap.isEmpty) {
+                val d = snap.documents.first()
+                activeCycleStatus = d.getString("status")
+                activeCycleDate = d.getString("startDate")
+                activeCycleDue = d.getDouble("zakatDue") ?: 0.0
+            } else {
+                activeCycleStatus = null
+                activeCycleDate = null
+            }
+            recalculateZakat()
+        })
 
-        var inc = 0.0
-        var exp = 0.0
-        all.forEach { tx ->
-            if (!tx.isTransfer && tx.date in start..end) {
-                if (tx.type == "Income") inc += tx.amount
-                if (tx.type == "Expense") exp += tx.amount
+        listeners.add(db.collection("users").document(uid).collection("investments").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
+            invTotal = snap?.documents?.sumOf { ((it.getDouble("currentValue") ?: it.getDouble("purchasePrice") ?: 0.0) * (it.getDouble("quantity") ?: 1.0)) } ?: 0.0
+            recalculateZakat()
+        })
+
+        listeners.add(db.collection("users").document(uid).collection("jewellery").whereNotEqualTo("status", "sold").addSnapshotListener { snap, _ ->
+            jewTotal = snap?.documents?.sumOf { it.getDouble("currentZakatValue") ?: 0.0 } ?: 0.0
+            recalculateZakat()
+        })
+
+        listeners.add(db.collection("users").document(uid).collection("lendings").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
+            lendTotal = snap?.documents?.filter { it.getBoolean("countForZakat") == true }?.sumOf { it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0 } ?: 0.0
+            recalculateZakat()
+        })
+
+        listeners.add(db.collection("users").document(uid).collection("loans").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
+            loanTotal = snap?.documents?.sumOf { it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0 } ?: 0.0
+            recalculateZakat()
+        })
+    }
+
+    private fun recalculateZakat() {
+        val netWealth = maxOf(0.0, accTotal + invTotal + jewTotal + lendTotal - loanTotal)
+        val nisab = _uiState.value.nisabThreshold
+
+        var status = "Not Mandatory"
+        var progress = 0f
+        var daysRem = 0
+        var amt = 0.0
+
+        if (nisab > 0) {
+            progress = ((netWealth / nisab) * 100).toFloat().coerceIn(0f, 100f)
+            amt = netWealth * 0.025
+
+            if (activeCycleDate != null) {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                val start = runCatching { sdf.parse(activeCycleDate!!)?.time }.getOrNull() ?: System.currentTimeMillis()
+                val end = start + (354L * 24 * 60 * 60 * 1000) // Hijri year approx
+                val today = System.currentTimeMillis()
+
+                if (today >= end || activeCycleStatus == "due") {
+                    status = if (netWealth >= nisab) "Zakat Due" else "Exempt"
+                    amt = if (activeCycleDue > 0) activeCycleDue else netWealth * 0.025
+                } else {
+                    status = "Monitoring"
+                    daysRem = maxOf(0, ceil((end - today) / (1000.0 * 60 * 60 * 24)).toInt())
+                }
+            } else if (netWealth >= nisab) {
+                status = "Ready to Monitor"
             }
         }
 
-        _uiState.update { state ->
-            state.copy(
-                isLoading = false,
-                recentTransactions = all.take(8),
-                thisMonthIncome = inc,
-                thisMonthExpense = exp,
-                syncStatus = newSyncStatus ?: state.syncStatus
-            )
+        _uiState.update { 
+            it.copy(
+                netZakatableWealth = netWealth, zakatStatus = status, zakatAmount = amt, 
+                zakatProgress = progress, daysRemaining = daysRem, activeCycleDate = activeCycleDate
+            ) 
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        accListener?.remove()
-        txListener?.remove()
-        trListener?.remove()
-        catListener?.remove()
+        listeners.forEach { it.remove() }
     }
 }

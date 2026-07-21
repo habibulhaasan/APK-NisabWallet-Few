@@ -70,34 +70,29 @@ fun InvestmentsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFFF9FAFB)
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(modifier = Modifier.width(56.dp)) // Drawer padding
-                                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Investment Portfolio", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            Text("", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 88.dp))
-                        }
+        containerColor = Color(0xFFF9FAFB),
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(modifier = Modifier.width(48.dp)) // Clears the floating hamburger menu
+                    Column {
+                        Text("Investment Portfolio", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Track your investments and returns", fontSize = 12.sp, color = Color(0xFF6B7280))
                     }
                 }
-
+            }
+        }
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 item {
                     Button(
                         onClick = { viewModel.openAddModal() },
@@ -184,18 +179,18 @@ fun InvestmentsScreen(
                             modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))
                         ) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(
                                     value = state.searchQuery, onValueChange = { viewModel.setSearchQuery(it) },
-                                    placeholder = { Text("Search investments...", fontSize = 13.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp)) },
-                                    modifier = Modifier.fillMaxWidth().height(48.dp), singleLine = true, shape = RoundedCornerShape(8.dp)
+                                    placeholder = { Text("Search investments...", fontSize = 14.sp) },
+                                    leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
+                                    modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(10.dp)
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     val typeOpts = listOf(Pair("all", "All Types")) + InvestmentConstants.TYPES.map { Pair(it, InvestmentConstants.getLabel(it)) }
-                                    AppDropdownPair("Type", state.filterType, typeOpts, { t: String -> viewModel.setFilterType(t) }, Modifier.weight(1f))
-                                    AppDropdownPair("Status", state.filterStatus, listOf(Pair("all", "All Status"), Pair("active", "Active"), Pair("matured", "Matured"), Pair("sold", "Sold"), Pair("closed", "Closed")), { s: String -> viewModel.setFilterStatus(s) }, Modifier.weight(1f))
-                                    AppDropdownPair("Sort By", state.sortBy, listOf(Pair("date", "Purchase Date"), Pair("return", "Return %"), Pair("value", "Current Value")), { s: String -> viewModel.setSortBy(s) }, Modifier.weight(1f))
+                                    CompactFilterDropdown("Type", state.filterType, typeOpts, { t: String -> viewModel.setFilterType(t) }, Modifier.weight(1f))
+                                    CompactFilterDropdown("Status", state.filterStatus, listOf(Pair("all", "All Status"), Pair("active", "Active"), Pair("matured", "Matured"), Pair("sold", "Sold"), Pair("closed", "Closed")), { s: String -> viewModel.setFilterStatus(s) }, Modifier.weight(1f))
+                                    CompactFilterDropdown("Sort By", state.sortBy, listOf(Pair("date", "Purchase Date"), Pair("return", "Return %"), Pair("value", "Current Value")), { s: String -> viewModel.setSortBy(s) }, Modifier.weight(1f))
                                 }
                             }
                         }
@@ -231,6 +226,28 @@ fun InvestmentsScreen(
     }
 }
 
+// ─── Compact Filters ──────────────────────────────────────────────────────────
+
+@Composable
+private fun CompactFilterDropdown(label: String, value: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit, modifier: Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = options.find { it.first == value }?.second ?: label
+    Box(modifier) {
+        Surface(modifier = Modifier.fillMaxWidth().clickable { expanded = true }, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFD1D5DB)), color = Color.White) {
+            Row(Modifier.padding(horizontal = 6.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(label, fontSize = 9.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(display, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.wrapContentWidth().background(Color.White)) {
+            options.forEach { (k, v) -> DropdownMenuItem(text = { Text(v, fontSize = 12.sp, maxLines = 1) }, onClick = { onSelect(k); expanded = false }) }
+        }
+    }
+}
+
 // ─── Modal Implementation ─────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -260,9 +277,9 @@ private fun AddEditInvestmentModal(
                         HorizontalDivider()
 
                         // Scrollable Form
-                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-                            // Type & Account (Drill-downs)
+                            // Type & Account (Drill-downs remain since they have many options)
                             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))) {
                                 DrillDownRow(
                                     label = "Investment Type *",
@@ -279,20 +296,20 @@ private fun AddEditInvestmentModal(
                                 )
                             }
 
-                            OutlinedTextField(value = form.name, onValueChange = { n -> onUpdateForm { it.copy(name = n) } }, label = { Text("Investment Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                            OutlinedTextField(value = form.name, onValueChange = { n -> onUpdateForm { it.copy(name = n) } }, label = { Text("Investment Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
 
                             when (form.type) {
                                 InvestmentConstants.STOCK -> {
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        OutlinedTextField(value = form.symbol, onValueChange = { v -> onUpdateForm { it.copy(symbol = v) } }, label = { Text("Symbol") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), singleLine = true)
-                                        OutlinedTextField(value = form.exchange, onValueChange = { v -> onUpdateForm { it.copy(exchange = v) } }, label = { Text("Exchange") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), singleLine = true)
+                                        OutlinedTextField(value = form.symbol, onValueChange = { v -> onUpdateForm { it.copy(symbol = v) } }, label = { Text("Symbol") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
+                                        OutlinedTextField(value = form.exchange, onValueChange = { v -> onUpdateForm { it.copy(exchange = v) } }, label = { Text("Exchange") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), singleLine = true)
                                     }
                                 }
                                 InvestmentConstants.FDR -> {
-                                    OutlinedTextField(value = form.institution, onValueChange = { v -> onUpdateForm { it.copy(institution = v) } }, label = { Text("Bank/Institution") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                                    OutlinedTextField(value = form.institution, onValueChange = { v -> onUpdateForm { it.copy(institution = v) } }, label = { Text("Bank/Institution") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true)
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        OutlinedTextField(value = form.interestRate, onValueChange = { v -> onUpdateForm { it.copy(interestRate = v) } }, label = { Text("Interest Rate %") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                        OutlinedTextField(value = form.maturityAmount, onValueChange = { v -> onUpdateForm { it.copy(maturityAmount = v) } }, label = { Text("Maturity Amount") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                        OutlinedTextField(value = form.interestRate, onValueChange = { v -> onUpdateForm { it.copy(interestRate = v) } }, label = { Text("Interest Rate %") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                        OutlinedTextField(value = form.maturityAmount, onValueChange = { v -> onUpdateForm { it.copy(maturityAmount = v) } }, label = { Text("Maturity Amount") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                                     }
                                     DateSelectionField(label = "Maturity Date", dateString = form.maturityDate, onDateSelected = { d -> onUpdateForm { it.copy(maturityDate = d) } })
                                 }
@@ -300,53 +317,56 @@ private fun AddEditInvestmentModal(
 
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 DateSelectionField(label = "Purchase Date *", dateString = form.purchaseDate, onDateSelected = { d -> onUpdateForm { it.copy(purchaseDate = d) } }, modifier = Modifier.weight(1f))
-                                OutlinedTextField(value = form.purchasePrice, onValueChange = { v -> onUpdateForm { it.copy(purchasePrice = v) } }, label = { Text("Price/Unit *") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.purchasePrice, onValueChange = { v -> onUpdateForm { it.copy(purchasePrice = v) } }, label = { Text("Price/Unit *") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedTextField(value = form.quantity, onValueChange = { v -> onUpdateForm { it.copy(quantity = v) } }, label = { Text("Quantity/Units *") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                                OutlinedTextField(value = form.currentValue, onValueChange = { v -> onUpdateForm { it.copy(currentValue = v) } }, label = { Text("Current Value/Unit") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.quantity, onValueChange = { v -> onUpdateForm { it.copy(quantity = v) } }, label = { Text("Quantity/Units *") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                                OutlinedTextField(value = form.currentValue, onValueChange = { v -> onUpdateForm { it.copy(currentValue = v) } }, label = { Text("Current Value/Unit") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             }
 
-                            // Metadata (Status, Category, Risk)
-                            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))) {
-                                DrillDownRow(
-                                    label = "Status",
-                                    value = form.status.replaceFirstChar { it.uppercase() },
-                                    icon = Icons.Default.Info,
-                                    onClick = { currentView = "selectStatus" }
-                                )
-                                HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(start = 44.dp))
-                                DrillDownRow(
-                                    label = "Category",
-                                    value = form.category.replaceFirstChar { it.uppercase() },
-                                    icon = Icons.Default.Label,
-                                    onClick = { currentView = "selectCategory" }
-                                )
-                                HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(start = 44.dp))
-                                DrillDownRow(
-                                    label = "Risk Level",
-                                    value = form.riskLevel.replaceFirstChar { it.uppercase() },
-                                    icon = Icons.Default.Warning,
-                                    onClick = { currentView = "selectRisk" }
-                                )
+                            // ─── Selectable Segments instead of DrillDown for small arrays ───
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Status", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("active" to "Active", "matured" to "Matured", "sold" to "Sold", "closed" to "Closed").forEach { (v, l) ->
+                                        val sel = form.status == v
+                                        Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if(sel) Color(0xFF111827) else Color(0xFFF3F4F6)).clickable{ onUpdateForm { it.copy(status = v) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                            Text(l, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if(sel) Color.White else Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
                             }
 
-                            OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), maxLines = 3)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Risk Level", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("low" to "Low", "medium" to "Medium", "high" to "High").forEach { (v, l) ->
+                                        val sel = form.riskLevel == v
+                                        val bg = if(sel) {
+                                            if(v=="high") Color(0xFFDC2626) else if(v=="medium") Color(0xFFD97706) else Color(0xFF16A34A)
+                                        } else Color(0xFFF3F4F6)
+                                        Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(bg).clickable{ onUpdateForm { it.copy(riskLevel = v) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                            Text(l, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if(sel) Color.White else Color(0xFF4B5563))
+                                        }
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), maxLines = 3)
                         }
 
                         // Footer
                         HorizontalDivider()
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) { Text("Cancel") }
-                            Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))) {
+                            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
+                            Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF111827))) {
                                 if (isSaving) { CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp); Spacer(Modifier.width(8.dp)); Text("Saving...") }
                                 else Text(if (form.id != null) "Update" else "Save", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
-
                 "selectAccount" -> {
                     GenericSelectionList(
                         title = "Select Account",
@@ -365,36 +385,6 @@ private fun AddEditInvestmentModal(
                         onSelect = { onUpdateForm { f -> f.copy(type = it) }; currentView = "form" },
                         onBack = { currentView = "form" },
                         icon = Icons.Default.Category
-                    )
-                }
-                "selectStatus" -> {
-                    GenericSelectionList(
-                        title = "Status",
-                        items = listOf("Active", "Matured", "Sold", "Closed").map { Pair(it.lowercase(), it) },
-                        selectedValue = form.status,
-                        onSelect = { onUpdateForm { f -> f.copy(status = it) }; currentView = "form" },
-                        onBack = { currentView = "form" },
-                        icon = Icons.Default.Info
-                    )
-                }
-                "selectCategory" -> {
-                    GenericSelectionList(
-                        title = "Category",
-                        items = listOf("Growth", "Income", "Safe", "Speculative").map { Pair(it.lowercase(), it) },
-                        selectedValue = form.category,
-                        onSelect = { onUpdateForm { f -> f.copy(category = it) }; currentView = "form" },
-                        onBack = { currentView = "form" },
-                        icon = Icons.Default.Label
-                    )
-                }
-                "selectRisk" -> {
-                    GenericSelectionList(
-                        title = "Risk Level",
-                        items = listOf("Low", "Medium", "High").map { Pair(it.lowercase(), it) },
-                        selectedValue = form.riskLevel,
-                        onSelect = { onUpdateForm { f -> f.copy(riskLevel = it) }; currentView = "form" },
-                        onBack = { currentView = "form" },
-                        icon = Icons.Default.Warning
                     )
                 }
             }
@@ -469,29 +459,6 @@ private fun GenericSelectionList(
     }
 }
 
-// ─── Filter Dropdown Helper ───────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AppDropdownPair(
-    label: String, selectedValue: String, options: List<Pair<String, String>>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, enabled: Boolean = true
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val display = options.find { it.first == selectedValue }?.second ?: "Select"
-    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if(enabled) expanded = it }, modifier = modifier) {
-        OutlinedTextField(
-            value = display, onValueChange = {}, readOnly = true, label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(8.dp), enabled = enabled
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
-            options.forEach { (id, text) -> DropdownMenuItem(text = { Text(text) }, onClick = { onSelect(id); expanded = false }) }
-        }
-    }
-}
-
 // ─── List Cards ───────────────────────────────────────────────────────────────
 
 @Composable
@@ -519,28 +486,28 @@ private fun InvestmentCard(inv: Investment, fmt: (Double) -> String, onClick: ()
             Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(typeColor))
             Column(Modifier.padding(16.dp).weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(inv.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Text(InvestmentConstants.getLabel(inv.type), fontSize = 11.sp, color = Color(0xFF6B7280))
+                            Text(InvestmentConstants.getLabel(inv.type), fontSize = 11.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (inv.symbol.isNotBlank()) {
                                 Text(" • ", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(horizontal = 4.dp))
-                                Text(inv.symbol, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF4B5563))
+                                Text(inv.symbol, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF4B5563), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(fmt(inv.totalCurrentValue), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("${if (isProfit) "+" else ""}${String.format(Locale.US, "%.2f", inv.percentageReturn)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = retColor)
+                        Text("${if (isProfit) "+" else ""}${String.format(Locale.US, "%.2f", inv.percentageReturn)}%", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = retColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 
                 Spacer(Modifier.height(12.dp))
                 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) { Text("Invested", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(inv.totalInvested), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    Column(Modifier.weight(1f)) { Text("Returns", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(inv.absoluteReturn), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = retColor, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    Column(Modifier.weight(1f)) { Text("Date", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(inv.purchaseDate.ifBlank { "-" }, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Invested", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis); Text(fmt(inv.totalInvested), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Returns", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis); Text(fmt(inv.absoluteReturn), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = retColor, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    Column(Modifier.weight(1f)) { Text("Date", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis); Text(inv.purchaseDate.ifBlank { "-" }, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
             }
         }
@@ -552,16 +519,16 @@ private fun InvestmentCard(inv: Investment, fmt: (Double) -> String, onClick: ()
 @Composable
 private fun DateSelectionField(label: String, dateString: String, onDateSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     var showPicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = try { val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }; sdf.parse(dateString)?.time } catch (_: Exception) { null }
-    )
-
+    
     Box(modifier = modifier) {
-        OutlinedTextField(value = dateString, onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true, trailingIcon = { Icon(Icons.Default.CalendarToday, null) })
+        OutlinedTextField(value = dateString, onValueChange = {}, readOnly = true, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), singleLine = true, trailingIcon = { Icon(Icons.Default.CalendarToday, null) })
         Box(modifier = Modifier.matchParentSize().clickable { showPicker = true })
     }
 
     if (showPicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = try { val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }; sdf.parse(dateString)?.time } catch (_: Exception) { null }
+        )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = { TextButton(onClick = { datePickerState.selectedDateMillis?.let { millis -> onDateSelected(SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(millis))) }; showPicker = false }) { Text("OK") } },

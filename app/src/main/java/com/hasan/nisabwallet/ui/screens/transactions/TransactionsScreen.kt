@@ -46,6 +46,8 @@ import java.util.*
 @Composable
 fun TransactionsScreen(
     viewModel: TransactionsViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
@@ -55,62 +57,147 @@ fun TransactionsScreen(
         onRefresh  = { viewModel.refresh() },
     )
 
-    Box(Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
-        Column(Modifier.fillMaxSize()) {
+    // Respond to Global Navigation FAB
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.showAddSheet("Expense")
+            onAddHandled()
+        }
+    }
 
-            TopActionBar(
-                onAddIncome  = { viewModel.showAddSheet("Income") },
-                onAddExpense = { viewModel.showAddSheet("Expense") },
-                onAddTransfer= { viewModel.showAddSheet("Transfer") },
-                onFilter     = { viewModel.showFilterSheet() },
-                hasActiveFilter = state.filterType != "All"
-                        || state.filterAccountId != "all"
-                        || state.filterCategoryId != "all"
-                        || state.filterStartDate.isNotBlank(),
-            )
+    Scaffold(
+        containerColor = Color(0xFFF9FAFB),
+        topBar = {
+            // ─── Frozen Top Bar ───
+            val hasActiveFilter = state.filterType != "All"
+                    || state.filterAccountId != "all"
+                    || state.filterCategoryId != "all"
+                    || state.filterStartDate.isNotBlank()
 
-            MonthlySummaryRow(
-                income  = state.summaryIncome,
-                expense = state.summaryExpense,
-                fmt     = fmt,
-            )
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(modifier = Modifier.width(48.dp)) // Clears the floating hamburger menu
+                            Column {
+                                Text("Transactions", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Manage your income and expenses", fontSize = 12.sp, color = Color(0xFF6B7280))
+                            }
+                        }
+                        BadgedBox(
+                            badge = {
+                                if (hasActiveFilter) Badge(containerColor = Color(0xFF2563EB))
+                            }
+                        ) {
+                            IconButton(onClick = { viewModel.showFilterSheet() }) {
+                                Icon(Icons.Default.FilterList, contentDescription = "Filter", tint = Color(0xFF4B5563))
+                            }
+                        }
+                    }
 
-            SearchBar(
-                query    = state.searchQuery,
-                onChange = { viewModel.setSearchQuery(it) },
-            )
+                    Spacer(Modifier.height(16.dp))
 
-            TypeFilterTabs(
-                selected = state.filterType,
-                onSelect = { viewModel.setFilterType(it) },
-            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { viewModel.showAddSheet("Income") },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFF0FDF4), contentColor = Color(0xFF16A34A)),
+                            contentPadding = PaddingValues(vertical = 10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Income", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
 
-            if (state.isLoading) {
-                LoadingShimmerList()
-            } else if (state.filteredTransactions.isEmpty()) {
-                EmptyTransactionsState(
-                    hasFilters = state.filterType != "All" || state.searchQuery.isNotBlank(),
-                    onClearFilters = { viewModel.clearFilters() },
-                    onAdd = { viewModel.showAddSheet() },
-                )
-            } else {
-                TransactionList(
-                    transactions = state.filteredTransactions,
-                    getAccountName  = { viewModel.getAccountName(it) },
-                    getCategoryName = { viewModel.getCategoryName(it) },
-                    getCategoryColor= { viewModel.getCategoryColor(it) },
-                    onTap    = { viewModel.showDetail(it) },
-                    fmt      = fmt,
-                )
+                        FilledTonalButton(
+                            onClick = { viewModel.showAddSheet("Expense") },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFFFF1F2), contentColor = Color(0xFFDC2626)),
+                            contentPadding = PaddingValues(vertical = 10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Expense", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        FilledTonalButton(
+                            onClick = { viewModel.showAddSheet("Transfer") },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF2563EB)),
+                            contentPadding = PaddingValues(vertical = 10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Transfer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.showAddSheet("Expense") },
+                containerColor = Color(0xFF111827),
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New Transaction")
             }
         }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding).pullRefresh(pullRefreshState)) {
+            Column(Modifier.fillMaxSize()) {
 
-        PullRefreshIndicator(
-            refreshing   = state.isLoading,
-            state        = pullRefreshState,
-            modifier     = Modifier.align(Alignment.TopCenter),
-            contentColor = MaterialTheme.colorScheme.primary,
-        )
+                MonthlySummaryRow(
+                    income  = state.summaryIncome,
+                    expense = state.summaryExpense,
+                    fmt     = fmt,
+                )
+
+                SearchBar(
+                    query    = state.searchQuery,
+                    onChange = { viewModel.setSearchQuery(it) },
+                )
+
+                TypeFilterTabs(
+                    selected = state.filterType,
+                    onSelect = { viewModel.setFilterType(it) },
+                )
+
+                if (state.isLoading) {
+                    LoadingShimmerList()
+                } else if (state.filteredTransactions.isEmpty()) {
+                    EmptyTransactionsState(
+                        hasFilters = state.filterType != "All" || state.searchQuery.isNotBlank(),
+                        onClearFilters = { viewModel.clearFilters() },
+                        onAdd = { viewModel.showAddSheet("Expense") },
+                    )
+                } else {
+                    TransactionList(
+                        transactions = state.filteredTransactions,
+                        getAccountName  = { viewModel.getAccountName(it) },
+                        getCategoryName = { viewModel.getCategoryName(it) },
+                        getCategoryColor= { viewModel.getCategoryColor(it) },
+                        onTap    = { viewModel.showDetail(it) },
+                        fmt      = fmt,
+                    )
+                }
+            }
+
+            PullRefreshIndicator(
+                refreshing   = state.isLoading,
+                state        = pullRefreshState,
+                modifier     = Modifier.align(Alignment.TopCenter),
+                contentColor = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 
     if (state.showDetailPopup && state.detailTransaction != null) {
@@ -173,88 +260,6 @@ fun TransactionsScreen(
                 OutlinedButton(onClick = { viewModel.hideDeleteConfirm() }) { Text("Cancel") }
             },
         )
-    }
-}
-
-// ─── Top Action Bar ───────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TopActionBar(
-    onAddIncome: () -> Unit,
-    onAddExpense: () -> Unit,
-    onAddTransfer: () -> Unit,
-    onFilter: () -> Unit,
-    hasActiveFilter: Boolean,
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Transactions",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            BadgedBox(
-                badge = {
-                    if (hasActiveFilter) Badge(containerColor = MaterialTheme.colorScheme.primary)
-                }
-            ) {
-                IconButton(onClick = onFilter) {
-                    Icon(Icons.Default.FilterList, contentDescription = "Filter")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilledTonalButton(
-                onClick = onAddIncome,
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Color(0xFFF0FDF4), contentColor = Color(0xFF16A34A)
-                ),
-                contentPadding = PaddingValues(vertical = 10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Income", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-
-            FilledTonalButton(
-                onClick = onAddExpense,
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Color(0xFFFFF1F2), contentColor = Color(0xFFDC2626)
-                ),
-                contentPadding = PaddingValues(vertical = 10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Expense", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-
-            FilledTonalButton(
-                onClick = onAddTransfer,
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF2563EB)
-                ),
-                contentPadding = PaddingValues(vertical = 10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Transfer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
     }
 }
 
@@ -395,7 +400,7 @@ private fun TransactionList(
 
     LazyColumn(
         modifier       = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp), // Extra padding for FAB
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         grouped.forEach { (date, txs) ->
@@ -538,6 +543,7 @@ private fun TransactionDetailSheet(
     onDelete: (Transaction) -> Unit,
     fmt: (Double) -> String,
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val accentColor = if (transaction.isTransfer) Color(0xFF2563EB) else if (transaction.type == "Income") Color(0xFF16A34A) else Color(0xFFDC2626)
     val sign        = if (transaction.isTransfer) "" else if (transaction.type == "Income") "+" else "−"
 
@@ -549,9 +555,10 @@ private fun TransactionDetailSheet(
 
     ModalBottomSheet(
         onDismissRequest = onClose,
+        sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 32.dp)) {
 
             Box(
                 modifier = Modifier.fillMaxWidth()
@@ -661,6 +668,8 @@ private fun AddEditTransactionSheet(
     onAddCategory: (name: String, type: String, color: String, onAdded: (CategoryItem) -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     var form by remember(editing, defaultType) {
         mutableStateOf(
             if (editing != null) {
@@ -707,6 +716,7 @@ private fun AddEditTransactionSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     ) {
         Crossfade(targetState = currentView, label = "SheetNavigation") { view ->
@@ -716,6 +726,8 @@ private fun AddEditTransactionSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight(0.85f)
+                            .imePadding()
+                            .navigationBarsPadding()
                             .padding(horizontal = 20.dp, vertical = 8.dp)
                             .padding(bottom = 36.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -843,7 +855,7 @@ private fun AddEditTransactionSheet(
                 }
 
                 "selectAccount", "selectToAccount" -> {
-                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).navigationBarsPadding().padding(bottom = 24.dp)) {
                         SubSheetHeader(title = "Select Account", onBack = { currentView = "form" })
 
                         // Alphabetical Sort with "Cash" pinned to the top
@@ -884,7 +896,7 @@ private fun AddEditTransactionSheet(
                 }
 
                 "selectCategory" -> {
-                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).navigationBarsPadding().padding(bottom = 24.dp)) {
                         SubSheetHeader(title = "Select Category", onBack = { currentView = "form" })
 
                         // Alphabetically sorted 2-Column Grid
@@ -954,7 +966,7 @@ private fun AddEditTransactionSheet(
                 }
 
                 "createCategory" -> {
-                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(bottom = 24.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).imePadding().navigationBarsPadding().padding(bottom = 24.dp)) {
                         SubSheetHeader(title = "New Category", onBack = { currentView = "selectCategory" })
 
                         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1180,15 +1192,17 @@ private fun FilterSheet(
     onClearAll: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var startDate by remember { mutableStateOf(state.filterStartDate) }
     var endDate   by remember { mutableStateOf(state.filterEndDate) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 36.dp),
+            modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(

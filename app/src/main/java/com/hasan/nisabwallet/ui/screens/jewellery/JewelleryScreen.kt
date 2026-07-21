@@ -71,34 +71,30 @@ fun JewelleryScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = Color(0xFFF9FAFB),
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(modifier = Modifier.width(48.dp)) // Clears the hamburger menu
+                    Column {
+                        Text("Jewellery Tracker", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Track gold & silver — monitor value for Zakat", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    }
+                }
+            }
+        }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(modifier = Modifier.width(56.dp))
-                                Icon(Icons.Default.Diamond, null, tint = Color(0xFFF59E0B), modifier = Modifier.size(24.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Jewellery Tracker", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            Text("Track gold & silver — monitor value for Zakat", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 88.dp))
-                        }
-                    }
-                }
-
                 // Add Button
                 item {
                     Button(
@@ -233,16 +229,16 @@ private fun CompactFilterDropdown(label: String, value: String, options: List<Pa
     val display = options.find { it.first == value }?.second ?: label
     Box(modifier) {
         Surface(modifier = Modifier.fillMaxWidth().clickable { expanded = true }, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFD1D5DB)), color = Color.White) {
-            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(horizontal = 6.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(label, fontSize = 9.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(display, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(display, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
-            options.forEach { (k, v) -> DropdownMenuItem(text = { Text(v, fontSize = 13.sp) }, onClick = { onSelect(k); expanded = false }) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.wrapContentWidth().background(Color.White)) {
+            options.forEach { (k, v) -> DropdownMenuItem(text = { Text(v, fontSize = 12.sp, maxLines = 1) }, onClick = { onSelect(k); expanded = false }) }
         }
     }
 }
@@ -403,11 +399,22 @@ private fun AddEditJewelleryModal(
                                 Text("Basic Info", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 OutlinedTextField(value = form.name, onValueChange = { n -> onUpdateForm { it.copy(name = n) } }, label = { Text("Item Name *") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
 
-                                // Category & Metal Drill-Downs
+                                // Metal Selectable Segments
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Metal *", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("Gold" to "Gold", "Silver" to "Silver").forEach { (v, l) ->
+                                            val sel = form.metal == v
+                                            Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if(sel) Color(0xFF111827) else Color(0xFFF3F4F6)).clickable{ onUpdateForm { it.copy(metal = v, karat = "22K") } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                                Text(l, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if(sel) Color.White else Color(0xFF4B5563))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Category Drill-Down
                                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))) {
                                     DrillDownRow(label = "Category", value = form.category, icon = Icons.Default.Category, onClick = { currentView = "selectCategory" })
-                                    HorizontalDivider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(start = 44.dp))
-                                    DrillDownRow(label = "Metal", value = form.metal, icon = Icons.Default.Diamond, onClick = { currentView = "selectMetal" })
                                 }
 
                                 Text("Karat / Purity", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151))
@@ -423,7 +430,7 @@ private fun AddEditJewelleryModal(
                                 OutlinedTextField(value = form.notes, onValueChange = { n -> onUpdateForm { it.copy(notes = n) } }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), maxLines = 2)
                             }
 
-                            // Acquisition
+                            // Acquisition Selectable Segments
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("How Was It Acquired?", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -552,16 +559,6 @@ private fun AddEditJewelleryModal(
                         onSelect = { onUpdateForm { f -> f.copy(category = it) }; currentView = "form" },
                         onBack = { currentView = "form" },
                         icon = Icons.Default.Category
-                    )
-                }
-                "selectMetal" -> {
-                    GenericSelectionList(
-                        title = "Select Metal",
-                        items = listOf("Gold", "Silver").map { Pair(it, it) },
-                        selectedValue = form.metal,
-                        onSelect = { onUpdateForm { f -> f.copy(metal = it, karat = "22K") }; currentView = "form" },
-                        onBack = { currentView = "form" },
-                        icon = Icons.Default.Diamond
                     )
                 }
                 "selectTxAccount" -> {

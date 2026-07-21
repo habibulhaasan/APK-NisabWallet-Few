@@ -1,5 +1,6 @@
 package com.hasan.nisabwallet.ui.screens.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,9 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +33,7 @@ import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
@@ -50,6 +50,8 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
+    
+    var showBalanceModal by remember { mutableStateOf(false) }
 
     if (state.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -58,88 +60,107 @@ fun DashboardScreen(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color(0xFFF9FAFB)), // Light gray background
-        contentPadding = PaddingValues(bottom = 100.dp) // Padding for floating nav
-    ) {
-        item {
-            DashboardHeader(state.syncStatus)
-        }
+    Scaffold(
+        containerColor = Color(0xFFF9FAFB), // Light gray background
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(modifier = Modifier.width(48.dp)) // Clears the hamburger menu
+                        Column {
+                            Text("Assalamu Alaikum, ${state.userName}!", fontSize = 13.sp, color = Color(0xFF6B7280))
+                            Text("Nisab Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        }
+                    }
 
-        item {
-            HeroBalanceCard(state.totalBalance, fmt)
+                    // Sync Status Pill
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (state.syncStatus == "Synced") Color(0xFFECFDF5) else Color(0xFFFFFBEB))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(if (state.syncStatus == "Synced") Color(0xFF10B981) else Color(0xFFF59E0B), CircleShape)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = state.syncStatus,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (state.syncStatus == "Synced") Color(0xFF047857) else Color(0xFFB45309)
+                        )
+                    }
+                }
+            }
         }
-
-        item {
-            MonthlySummaryPills(state.thisMonthIncome, state.thisMonthExpense, fmt)
-        }
-
-        item {
-            QuickActionsRow(
-                onNavigateToTransactions, onNavigateToAccounts, onNavigateToTransfer,
-                onNavigateToAnalytics, onNavigateToZakat
-            )
-        }
-
-        item {
-            RecentTransactionsSection(
-                transactions = state.recentTransactions,
-                categories = state.categories,
-                onViewAll = onNavigateToTransactions,
-                fmt = fmt
-            )
-        }
-    }
-}
-
-@Composable
-private fun DashboardHeader(syncStatus: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text("Assalamu Alaikum,", fontSize = 13.sp, color = Color(0xFF6B7280))
-            Text("Nisab Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-        }
-
-        // Sync Status Pill
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (syncStatus == "Synced") Color(0xFFECFDF5) else Color(0xFFFFFBEB))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentPadding = PaddingValues(bottom = 100.dp) // Padding for floating nav
         ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(if (syncStatus == "Synced") Color(0xFF10B981) else Color(0xFFF59E0B), CircleShape)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = syncStatus,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (syncStatus == "Synced") Color(0xFF047857) else Color(0xFFB45309)
-            )
+            item {
+                HeroBalanceCard(state.totalBalance, fmt, onClick = { showBalanceModal = true })
+            }
+
+            item {
+                MonthlySummaryPills(state.thisMonthIncome, state.thisMonthExpense, fmt)
+            }
+
+            item {
+                ZakatStatusCard(state, fmt, onNavigateToZakat)
+            }
+
+            item {
+                QuickActionsRow(
+                    onNavigateToTransactions, onNavigateToAccounts, onNavigateToTransfer,
+                    onNavigateToJewellery, onNavigateToAnalytics
+                )
+            }
+
+            item {
+                RecentTransactionsSection(
+                    transactions = state.recentTransactions,
+                    categories = state.categories,
+                    onViewAll = onNavigateToTransactions,
+                    fmt = fmt
+                )
+            }
         }
+    }
+
+    if (showBalanceModal) {
+        BalanceBreakdownModal(
+            accounts = state.accounts,
+            totalBalance = state.totalBalance,
+            fmt = fmt,
+            onDismiss = { showBalanceModal = false },
+            onManageAccounts = onNavigateToAccounts
+        )
     }
 }
 
 @Composable
-private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String) {
+private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(Color(0xFF064E3B), Color(0xFF059669)) // Deep Emerald Gradient
                 )
             )
+            .clickable { onClick() }
             .padding(24.dp)
     ) {
         Column {
@@ -147,6 +168,8 @@ private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String) {
                 Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("TOTAL BALANCE", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f), letterSpacing = 1.sp)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.OpenInFull, contentDescription = "Breakdown", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.height(8.dp))
             Text(
@@ -154,7 +177,9 @@ private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String) {
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White,
-                fontFamily = FontFamily.Monospace
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -177,9 +202,9 @@ private fun MonthlySummaryPills(income: Double, expense: Double, fmt: (Double) -
                     Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = Color(0xFF10B981))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Income", fontSize = 12.sp, color = Color(0xFF6B7280))
-                    Text(fmt(income), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                    Text(fmt(income), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -195,9 +220,68 @@ private fun MonthlySummaryPills(income: Double, expense: Double, fmt: (Double) -
                     Icon(Icons.AutoMirrored.Filled.TrendingDown, contentDescription = null, tint = Color(0xFFEF4444))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Expense", fontSize = 12.sp, color = Color(0xFF6B7280))
-                    Text(fmt(expense), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                    Text(fmt(expense), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() }, 
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White), 
+        border = BorderStroke(1.dp, Color(0xFFD1FAE5))
+    ) {
+        Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFFECFDF5), Color(0xFFF0FDF4)))).padding(20.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, null, tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Zakat Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                }
+                Surface(shape = RoundedCornerShape(50), color = if(state.zakatStatus == "Zakat Due") Color(0xFFDC2626) else Color(0xFF2563EB)) {
+                    Text(state.zakatStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) { 
+                    Text("Net Zakatable Wealth", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(fmt(state.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) { 
+                    Text("Nisab Threshold", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if(state.nisabThreshold>0) fmt(state.nisabThreshold) else "Not Set", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                }
+            }
+
+            if (state.nisabThreshold > 0) {
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Progress to Nisab", fontSize = 12.sp, color = Color(0xFF374151))
+                    Text("${String.format(Locale.US, "%.1f", state.zakatProgress)}%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669))
+                }
+                LinearProgressIndicator(progress = { (state.zakatProgress / 100f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = Color(0xFF059669), trackColor = Color(0xFFD1FAE5))
+            }
+
+            if (state.zakatStatus == "Zakat Due") {
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Zakat Amount Due (2.5%)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                    Text(fmt(state.zakatAmount), fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color(0xFF991B1B))
+                }
+            } else if (state.activeCycleDate != null && state.zakatStatus == "Monitoring") {
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth().background(Color(0xFFEFF6FF), RoundedCornerShape(8.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Days Remaining in Year", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
+                    Text("${state.daysRemaining} Days", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color(0xFF1D4ED8))
                 }
             }
         }
@@ -209,10 +293,10 @@ private fun QuickActionsRow(
     onTransactions: () -> Unit,
     onAccounts: () -> Unit,
     onTransfer: () -> Unit,
-    onAnalytics: () -> Unit,
-    onZakat: () -> Unit
+    onJewellery: () -> Unit,
+    onAnalytics: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
         Text(
             text = "Quick Actions",
             fontSize = 15.sp,
@@ -228,8 +312,8 @@ private fun QuickActionsRow(
             item { QuickActionItem("Records", Icons.Default.ReceiptLong, Color(0xFF3B82F6), Color(0xFFEFF6FF), onTransactions) }
             item { QuickActionItem("Transfer", Icons.Default.SyncAlt, Color(0xFF8B5CF6), Color(0xFFF5F3FF), onTransfer) }
             item { QuickActionItem("Accounts", Icons.Default.AccountBalance, Color(0xFFF59E0B), Color(0xFFFFFBEB), onAccounts) }
+            item { QuickActionItem("Jewellery", Icons.Default.Diamond, Color(0xFFD97706), Color(0xFFFFFBEB), onJewellery) }
             item { QuickActionItem("Analytics", Icons.Default.PieChart, Color(0xFFEC4899), Color(0xFFFDF2F8), onAnalytics) }
-            item { QuickActionItem("Zakat", Icons.Default.CleanHands, Color(0xFF10B981), Color(0xFFECFDF5), onZakat) }
         }
     }
 }
@@ -261,7 +345,7 @@ private fun RecentTransactionsSection(
     val display = remember { SimpleDateFormat("dd MMM", Locale.US) }
     val parser = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp).padding(top = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp).padding(top = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -341,7 +425,8 @@ private fun RecentTransactionsSection(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = amountColor,
-                                fontFamily = FontFamily.Monospace
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
                             )
                         }
 
@@ -349,6 +434,66 @@ private fun RecentTransactionsSection(
                             HorizontalDivider(color = Color(0xFFF3F4F6), modifier = Modifier.padding(horizontal = 16.dp))
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// ─── Modal Implementation ───
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BalanceBreakdownModal(
+    accounts: List<DashboardAccount>,
+    totalBalance: Double,
+    fmt: (Double) -> String,
+    onDismiss: () -> Unit,
+    onManageAccounts: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = Color.White
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Balance Breakdown", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
+            }
+            HorizontalDivider()
+
+            Column(Modifier.padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Total Available", fontSize = 13.sp, color = Color(0xFF6B7280))
+                    Text(fmt(totalBalance), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF059669), fontFamily = FontFamily.Monospace)
+                }
+                Spacer(Modifier.height(16.dp))
+                
+                Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF9FAFB), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Column {
+                        accounts.forEachIndexed { index, acc ->
+                            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(acc.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(acc.type, fontSize = 11.sp, color = Color(0xFF6B7280))
+                                }
+                                Text(fmt(acc.balance), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), fontFamily = FontFamily.Monospace)
+                            }
+                            if (index < accounts.lastIndex) HorizontalDivider(color = Color(0xFFE5E7EB))
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
+                TextButton(onClick = { onDismiss(); onManageAccounts() }) {
+                    Text("Manage Accounts", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(16.dp).padding(start = 4.dp))
                 }
             }
         }

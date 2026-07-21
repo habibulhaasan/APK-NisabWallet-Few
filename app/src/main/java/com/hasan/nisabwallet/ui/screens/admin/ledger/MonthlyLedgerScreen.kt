@@ -1,8 +1,5 @@
 package com.hasan.nisabwallet.ui.screens.admin.ledger
 
-// Converted from: src/app/dashboard/admin/monthly-ledger/page.js
-// Pairs with: MonthlyLedgerViewModel.kt
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +29,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -187,140 +185,171 @@ fun MonthlyLedgerScreen(
 
     if (!state.isAdmin) return
 
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                LedgerHeader(
-                    isSyncing = state.isSyncing,
-                    isRecording = state.isRecording,
-                    recordableCount = viewModel.recordableCount(),
-                    onSync = { viewModel.syncFromTransactions() },
-                    onRecordAll = {
-                        queueAllRecordable(state, viewModel)
-                        viewModel.openRowRecordModal()
-                    },
-                    onCategorySettings = { viewModel.showCatSettings() },
-                )
-            }
-
-            item {
-                MonthNavCard(
-                    monthLabel = MONTHS[state.curMonth],
-                    year = state.curYear,
-                    daysInMonth = daysInMonth(state),
-                    onPrev = { viewModel.goPrevMonth() },
-                    onNext = { viewModel.goNextMonth() },
-                )
-            }
-
-            if (state.isLoading) {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Emerald600)
-                    }
-                }
-            } else {
-                val visibleInc = visibleIncomeCats(state)
-                val visibleExp = visibleExpenseCats(state)
-
-                item {
-                    SummaryCard(
-                        totalIncome = totalIncome(state),
-                        totalExpenses = totalExpenses(state),
-                        visibleExpenseCats = visibleExp,
-                        catTotal = { expenseCatTotal(state, it) },
-                        budgets = state.budgets,
-                        onCategoryClick = { catId ->
-                            val baseOffset = 3 + if (visibleInc.isNotEmpty()) 1 else 0
-                            val index = visibleExp.indexOfFirst { it.id == catId }
-                            if (index >= 0) {
-                                scope.launch {
-                                    listState.animateScrollToItem(baseOffset + index)
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Gray50,
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Gray50, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(modifier = Modifier.width(48.dp)) // Clears the hamburger menu
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Monthly Ledger", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Gray900, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.width(8.dp))
+                            Surface(shape = RoundedCornerShape(50), color = Amber100) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = Amber700, modifier = Modifier.size(10.dp))
+                                    Spacer(Modifier.width(3.dp))
+                                    Text("Admin Only", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Amber700)
                                 }
                             }
                         }
-                    )
-                }
-
-                if (visibleInc.isNotEmpty()) {
-                    item {
-                        IncomeBlockCard(
-                            state = state,
-                            incomeCategories = visibleInc,
-                            collapsed = incomeCollapsed,
-                            onToggleCollapse = { incomeCollapsed = !incomeCollapsed },
-                            onToggleShowAllDates = { viewModel.toggleShowAllDates("__income__") },
-                            onUpdateRow = { day, rowId, field, value -> viewModel.updateIncomeRow(day, rowId, field, value) },
-                            onAddRow = { day, firstCat -> viewModel.addIncomeRow(day, firstCat) },
-                            onRemoveRow = { day, rowId -> viewModel.removeIncomeRow(day, rowId) },
-                            onToggleQueue = { catName, day, row -> viewModel.toggleRowQueue("__income__", catName, day, row, "income") },
-                        )
+                        Text("Day-by-day expense & income ledger", fontSize = 12.sp, color = Gray500)
                     }
                 }
-
-                items(visibleExp, key = { it.id }) { cat ->
-                    ExpenseCategoryCard(
-                        state = state,
-                        cat = cat,
-                        total = expenseCatTotal(state, cat.id),
-                        budget = state.budgets[cat.id]?.amount ?: 0.0,
-                        onToggleShowAllDates = { viewModel.toggleShowAllDates(cat.id) },
-                        onSetBudget = { viewModel.openBudgetModal(cat.id) },
-                        onUpdateRow = { day, rowId, field, value -> viewModel.updateExpenseRow(cat.id, day, rowId, field, value) },
-                        onAddRow = { day -> viewModel.addExpenseRow(cat.id, day) },
-                        onRemoveRow = { day, rowId -> viewModel.removeExpenseRow(cat.id, day, rowId) },
-                        onToggleQueue = { day, row -> viewModel.toggleRowQueue(cat.id, cat.name, day, row, "expense") },
+            }
+        }
+    ) { paddingValues ->
+        Box(Modifier.fillMaxSize().padding(paddingValues)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    LedgerActionRow(
+                        isSyncing = state.isSyncing,
+                        isRecording = state.isRecording,
+                        recordableCount = viewModel.recordableCount(),
+                        onSync = { viewModel.syncFromTransactions() },
+                        onRecordAll = {
+                            queueAllRecordable(state, viewModel)
+                            viewModel.openRowRecordModal()
+                        },
+                        onCategorySettings = { viewModel.showCatSettings() },
                     )
                 }
 
-                if (visibleExp.isEmpty() && state.expenseCategories.isNotEmpty()) {
-                    item { EmptyHint("All expense categories are hidden. Open Category Settings to show them.") }
+                item {
+                    MonthNavCard(
+                        monthLabel = MONTHS[state.curMonth],
+                        year = state.curYear,
+                        daysInMonth = daysInMonth(state),
+                        onPrev = { viewModel.goPrevMonth() },
+                        onNext = { viewModel.goNextMonth() },
+                    )
                 }
-                if (state.expenseCategories.isEmpty()) {
-                    item { EmptyHint("No expense categories found. Add categories in your settings first.") }
-                }
 
-                item { Spacer(Modifier.height(80.dp)) }
-            }
-        }
-
-        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
-
-        if (state.isDirty) {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.saveLedger() },
-                containerColor = Gray900,
-                contentColor = Color.White,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-            ) {
-                if (state.isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                if (state.isLoading) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Emerald600)
+                        }
+                    }
                 } else {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(if (state.isSaving) "Saving…" else "Save Changes", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
-        }
+                    val visibleInc = visibleIncomeCats(state)
+                    val visibleExp = visibleExpenseCats(state)
 
-        if (state.recordQueue.isNotEmpty()) {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.openRowRecordModal() },
-                containerColor = Emerald600,
-                contentColor = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp)
-                    .padding(bottom = if (state.isDirty) 84.dp else 16.dp),
-            ) {
-                Icon(Icons.Default.LibraryAddCheck, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Record ${state.recordQueue.size}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    item {
+                        SummaryCard(
+                            totalIncome = totalIncome(state),
+                            totalExpenses = totalExpenses(state),
+                            visibleExpenseCats = visibleExp,
+                            catTotal = { expenseCatTotal(state, it) },
+                            budgets = state.budgets,
+                            onCategoryClick = { catId ->
+                                val baseOffset = 3 + if (visibleInc.isNotEmpty()) 1 else 0
+                                val index = visibleExp.indexOfFirst { it.id == catId }
+                                if (index >= 0) {
+                                    scope.launch {
+                                        listState.animateScrollToItem(baseOffset + index)
+                                    }
+                                }
+                            }
+                        )
+                    }
+
+                    if (visibleInc.isNotEmpty()) {
+                        item {
+                            IncomeBlockCard(
+                                state = state,
+                                incomeCategories = visibleInc,
+                                collapsed = incomeCollapsed,
+                                onToggleCollapse = { incomeCollapsed = !incomeCollapsed },
+                                onToggleShowAllDates = { viewModel.toggleShowAllDates("__income__") },
+                                onUpdateRow = { day, rowId, field, value -> viewModel.updateIncomeRow(day, rowId, field, value) },
+                                onAddRow = { day, firstCat -> viewModel.addIncomeRow(day, firstCat) },
+                                onRemoveRow = { day, rowId -> viewModel.removeIncomeRow(day, rowId) },
+                                onToggleQueue = { catName, day, row -> viewModel.toggleRowQueue("__income__", catName, day, row, "income") },
+                            )
+                        }
+                    }
+
+                    items(visibleExp, key = { it.id }) { cat ->
+                        ExpenseCategoryCard(
+                            state = state,
+                            cat = cat,
+                            total = expenseCatTotal(state, cat.id),
+                            budget = state.budgets[cat.id]?.amount ?: 0.0,
+                            onToggleShowAllDates = { viewModel.toggleShowAllDates(cat.id) },
+                            onSetBudget = { viewModel.openBudgetModal(cat.id) },
+                            onUpdateRow = { day, rowId, field, value -> viewModel.updateExpenseRow(cat.id, day, rowId, field, value) },
+                            onAddRow = { day -> viewModel.addExpenseRow(cat.id, day) },
+                            onRemoveRow = { day, rowId -> viewModel.removeExpenseRow(cat.id, day, rowId) },
+                            onToggleQueue = { day, row -> viewModel.toggleRowQueue(cat.id, cat.name, day, row, "expense") },
+                        )
+                    }
+
+                    if (visibleExp.isEmpty() && state.expenseCategories.isNotEmpty()) {
+                        item { EmptyHint("All expense categories are hidden. Open Category Settings to show them.") }
+                    }
+                    if (state.expenseCategories.isEmpty()) {
+                        item { EmptyHint("No expense categories found. Add categories in your settings first.") }
+                    }
+
+                    item { Spacer(Modifier.height(80.dp)) }
+                }
+            }
+
+            if (state.isDirty) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.saveLedger() },
+                    containerColor = Gray900,
+                    contentColor = Color.White,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                ) {
+                    if (state.isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.isSaving) "Saving…" else "Save Changes", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
+            }
+
+            if (state.recordQueue.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.openRowRecordModal() },
+                    containerColor = Emerald600,
+                    contentColor = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp)
+                        .padding(bottom = if (state.isDirty) 84.dp else 16.dp),
+                ) {
+                    Icon(Icons.Default.LibraryAddCheck, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Record ${state.recordQueue.size}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
             }
         }
     }
@@ -386,10 +415,10 @@ private fun queueAllRecordable(state: LedgerUiState, viewModel: MonthlyLedgerVie
     }
 }
 
-// ─── Header ─────────────────────────────────────────────────────────────────
+// ─── Actions Row ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun LedgerHeader(
+private fun LedgerActionRow(
     isSyncing: Boolean,
     isRecording: Boolean,
     recordableCount: Int,
@@ -397,61 +426,32 @@ private fun LedgerHeader(
     onRecordAll: () -> Unit,
     onCategorySettings: () -> Unit,
 ) {
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Blue600),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.GridView, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Monthly Ledger", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gray900)
-                    Spacer(Modifier.width(6.dp))
-                    Surface(shape = RoundedCornerShape(50), color = Amber100) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.Shield, contentDescription = null, tint = Amber700, modifier = Modifier.size(10.dp))
-                            Spacer(Modifier.width(3.dp))
-                            Text("Admin Only", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Amber700)
-                        }
-                    }
-                }
-                Text("Day-by-day expense & income ledger", fontSize = 11.sp, color = Gray500)
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeaderActionChip(
-                label = if (isSyncing) "Syncing…" else "Sync",
-                icon = Icons.Default.Sync,
-                loading = isSyncing,
-                enabled = !isSyncing && !isRecording,
-                containerColor = Blue50,
-                contentColor = Blue700,
-                onClick = onSync,
-                modifier = Modifier.weight(1f),
-            )
-            HeaderActionChip(
-                label = if (isRecording) "Recording…" else "Record All${if (recordableCount > 0) " ($recordableCount)" else ""}",
-                icon = Icons.Default.LibraryAddCheck,
-                loading = isRecording,
-                enabled = !isRecording && !isSyncing && recordableCount > 0,
-                containerColor = Emerald50,
-                contentColor = Emerald700,
-                onClick = onRecordAll,
-                modifier = Modifier.weight(1.4f),
-            )
-            IconButton(
-                onClick = onCategorySettings,
-                modifier = Modifier.size(40.dp).border(1.dp, Gray200, RoundedCornerShape(10.dp)),
-            ) {
-                Icon(Icons.Default.Tune, contentDescription = "Category Settings", tint = Gray700, modifier = Modifier.size(18.dp))
-            }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        HeaderActionChip(
+            label = if (isSyncing) "Syncing…" else "Sync",
+            icon = Icons.Default.Sync,
+            loading = isSyncing,
+            enabled = !isSyncing && !isRecording,
+            containerColor = Blue50,
+            contentColor = Blue700,
+            onClick = onSync,
+            modifier = Modifier.weight(1f),
+        )
+        HeaderActionChip(
+            label = if (isRecording) "Recording…" else "Record All${if (recordableCount > 0) " ($recordableCount)" else ""}",
+            icon = Icons.Default.LibraryAddCheck,
+            loading = isRecording,
+            enabled = !isRecording && !isSyncing && recordableCount > 0,
+            containerColor = Emerald50,
+            contentColor = Emerald700,
+            onClick = onRecordAll,
+            modifier = Modifier.weight(1.4f),
+        )
+        IconButton(
+            onClick = onCategorySettings,
+            modifier = Modifier.size(40.dp).border(1.dp, Gray200, RoundedCornerShape(10.dp)),
+        ) {
+            Icon(Icons.Default.Tune, contentDescription = "Category Settings", tint = Gray700, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -1224,6 +1224,7 @@ private fun CategorySettingsSheet(
             Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
                 .padding(bottom = 24.dp)
         ) {
             Row(
@@ -1336,7 +1337,7 @@ private fun RowRecordSheet(
     val allSelected = queuedCatIds.all { state.modalAccountsPerCat[it]?.isNotBlank() == true }
 
     ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
