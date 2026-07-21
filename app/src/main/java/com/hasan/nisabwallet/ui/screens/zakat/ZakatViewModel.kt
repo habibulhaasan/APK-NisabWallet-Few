@@ -8,7 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import org.jsoup.Jsoup
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,14 +81,14 @@ data class WealthBreakdown(
     val goldTotal: Double = 0.0,
     val silverTotal: Double = 0.0,
     val otherTotal: Double = 0.0,
-    
+
     val accountsTotal: Double = 0.0,
     val investmentsTotal: Double = 0.0,
     val goalsTotal: Double = 0.0,
     val jewelleryTotal: Double = 0.0,
     val lendingsIncludedTotal: Double = 0.0,
     val lendingsExcludedTotal: Double = 0.0,
-    
+
     val ribaTotal: Double = 0.0,
     val loansTotal: Double = 0.0,
     val totalAssets: Double = 0.0,
@@ -96,12 +99,12 @@ data class ZakatUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val activeTab: String = "overview",
-    
+
     val activeCycle: ZakatCycle? = null,
     val cycleHistory: List<ZakatCycle> = emptyList(),
     val accounts: List<ZakatAccount> = emptyList(),
     val lendings: List<LendingItem> = emptyList(),
-    
+
     val settings: NisabSettings = NisabSettings(),
     val breakdown: WealthBreakdown = WealthBreakdown(),
     val daysRemaining: Int = 0,
@@ -115,10 +118,10 @@ data class ZakatUiState(
 
     val settingsForm: NisabSettings = NisabSettings(),
     val cycleStartDate: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
-    
+
     val paymentAmount: String = "",
     val paymentAccountId: String = "",
-    
+
     val bajusFetchState: String = "idle",
     val fetchedRates: BajusRates? = null
 )
@@ -165,8 +168,8 @@ class ZakatViewModel @Inject constructor(
                 if (snap != null) {
                     val lends = snap.documents.map {
                         LendingItem(
-                            it.id, 
-                            it.getString("borrowerName") ?: it.getString("name") ?: "Borrower", 
+                            it.id,
+                            it.getString("borrowerName") ?: it.getString("name") ?: "Borrower",
                             it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0,
                             it.getBoolean("countForZakat") ?: false
                         )
@@ -176,12 +179,12 @@ class ZakatViewModel @Inject constructor(
                 }
             }
 
-        // 3. Fetch Nisab Settings (with nested BAJUS maps)
+        // 3. Fetch Nisab Settings
         db.collection("users").document(uid).collection("settings").limit(1)
             .addSnapshotListener { snap, _ ->
                 if (snap != null && !snap.isEmpty) {
                     val data = snap.documents.first()
-                    
+
                     val goldMap = data.get("goldRates") as? Map<String, Double> ?: emptyMap()
                     val silverMap = data.get("silverRates") as? Map<String, Double> ?: emptyMap()
 
@@ -227,7 +230,7 @@ class ZakatViewModel @Inject constructor(
                     }
                     val active = cycles.find { it.status == "active" || it.status == "due" }
                     val history = cycles.filter { it.status == "paid" || it.status == "exempt" }
-                    
+
                     _uiState.update { it.copy(activeCycle = active, cycleHistory = history) }
                     recalculateWealth(uid)
                 }
@@ -276,8 +279,8 @@ class ZakatViewModel @Inject constructor(
                 val totalAssets = accTotal + invTotal + goalTotal + jewTotal + lendInc
                 val netWealth = maxOf(0.0, totalAssets - loanTotal - ribaTotal)
                 val breakdown = WealthBreakdown(
-                    cCash, cBank, cMobile, cGold, cSilver, cOther, 
-                    accTotal, invTotal, goalTotal, jewTotal, lendInc, lendExc, 
+                    cCash, cBank, cMobile, cGold, cSilver, cOther,
+                    accTotal, invTotal, goalTotal, jewTotal, lendInc, lendExc,
                     ribaTotal, loanTotal, totalAssets, netWealth
                 )
 
@@ -292,7 +295,7 @@ class ZakatViewModel @Inject constructor(
                 if (cycle != null) {
                     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                     val start = runCatching { sdf.parse(cycle.startDate)?.time }.getOrNull() ?: System.currentTimeMillis()
-                    val end = start + (354L * 24 * 60 * 60 * 1000) 
+                    val end = start + (354L * 24 * 60 * 60 * 1000)
                     val today = System.currentTimeMillis()
 
                     if (today >= end || cycle.status == "due") {
@@ -308,7 +311,7 @@ class ZakatViewModel @Inject constructor(
                     amountDue = netWealth * 0.025
                 }
 
-                _uiState.update { 
+                _uiState.update {
                     it.copy(isLoading = false, breakdown = breakdown, zakatStatus = status, zakatAmountDue = amountDue, daysRemaining = daysRem, progressPercentage = progress)
                 }
             } catch (e: Exception) {
@@ -324,7 +327,7 @@ class ZakatViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 db.collection("users").document(uid).collection("lendings").document(lendingId)
-                    .update("countForZakat", count) // No .await()
+                    .update("countForZakat", count)
                 emitEvent(ZakatEvent.ShowToast(if(count) "Lending included in Zakat" else "Lending excluded from Zakat"))
             } catch (e: Exception) {
                 emitEvent(ZakatEvent.ShowToast("Failed to update lending", true))
@@ -332,53 +335,193 @@ class ZakatViewModel @Inject constructor(
         }
     }
 
+    // ─── Live BAJUS Scraping & API Logic ───
     fun fetchBajusRates() {
         viewModelScope.launch {
             _uiState.update { it.copy(bajusFetchState = "loading") }
-            
-            // Simulating API Call to match React web app
-            delay(1500) 
-            
-            val simGold = KaratRates(k22 = 11500.0, k21 = 11000.0, k18 = 9500.0, traditional = 9000.0)
-            val simSilver = KaratRates(k22 = 145.0, k21 = 135.0, k18 = 115.0, traditional = 130.0)
-            
-            val simulatedRates = BajusRates(
-                gold = simGold,
-                silver = simSilver,
-                lastFetched = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
-            )
-            
-            _uiState.update { 
-                it.copy(
-                    bajusFetchState = "success", fetchedRates = simulatedRates,
-                    settingsForm = it.settingsForm.copy(
-                        goldRates = simGold,
-                        silverRates = simSilver,
-                        // Nisab is ALWAYS calculated from Traditional Silver on auto-fetch
-                        silverPricePerGram = simSilver.traditional, 
-                        silverPricePerVori = simSilver.traditional * GRAMS_PER_VORI,
-                        goldPricePerGram = simGold.k22,
-                        goldPricePerVori = simGold.k22 * GRAMS_PER_VORI,
-                        nisabThreshold = simSilver.traditional * NISAB_SILVER_GRAMS, 
-                        priceSource = "auto",
-                        priceUnit = "gram",
-                        lastFetched = simulatedRates.lastFetched
+            try {
+                val (fetchedRates, source) = fetchLiveMetalPrices()
+
+                _uiState.update {
+                    it.copy(
+                        bajusFetchState = "success",
+                        fetchedRates = fetchedRates,
+                        settingsForm = it.settingsForm.copy(
+                            goldRates = fetchedRates.gold,
+                            silverRates = fetchedRates.silver,
+                            silverPricePerGram = fetchedRates.silver.traditional,
+                            silverPricePerVori = fetchedRates.silver.traditional * GRAMS_PER_VORI,
+                            goldPricePerGram = fetchedRates.gold.k22,
+                            goldPricePerVori = fetchedRates.gold.k22 * GRAMS_PER_VORI,
+                            nisabThreshold = fetchedRates.silver.traditional * NISAB_SILVER_GRAMS,
+                            priceSource = "auto",
+                            priceUnit = "gram",
+                            lastFetched = fetchedRates.lastFetched
+                        )
                     )
-                ) 
+                }
+                emitEvent(ZakatEvent.ShowToast("Rates fetched via $source"))
+            } catch (e: Exception) {
+                _uiState.update { it.copy(bajusFetchState = "error") }
+                emitEvent(ZakatEvent.ShowToast("Failed to fetch rates: ${e.message}", true))
             }
-            emitEvent(ZakatEvent.ShowToast("Live rates fetched successfully"))
+        }
+    }
+
+    private suspend fun fetchLiveMetalPrices(): Pair<BajusRates, String> = withContext(Dispatchers.IO) {
+        val timeStr = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
+
+        // 1. Scraping goldr.org (Official BAJUS aggregator)
+        try {
+            val doc = Jsoup.connect("https://www.goldr.org/")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .timeout(15000)
+                .get()
+
+            val html = doc.html()
+
+            fun parsePrice(s: String?): Double? {
+                if (s == null) return null
+                val ascii = s.map { c ->
+                    when (c) {
+                        '০' -> '0'; '১' -> '1'; '২' -> '2'; '৩' -> '3'; '৪' -> '4'
+                        '৫' -> '5'; '৬' -> '6'; '৭' -> '7'; '৮' -> '8'; '৯' -> '9'
+                        else -> c
+                    }
+                }.joinToString("").replace(Regex("[^0-9]"), "")
+                return ascii.toDoubleOrNull()
+            }
+
+            fun allPricesForLabel(label: String): List<Double> {
+                val esc = Regex.escape(label)
+                val rx = Regex(esc + """[\s\S]*?<strong>৳([\d,০-৯]+)</strong>""")
+                val results = mutableListOf<Double>()
+                rx.findAll(html).forEach { m ->
+                    val p = parsePrice(m.groupValues.getOrNull(1))
+                    if (p != null) results.add(p)
+                }
+                return results
+            }
+
+            val gold22 = allPricesForLabel("22 Karat Gold")
+            val gold21 = allPricesForLabel("21 Karat Gold")
+            val gold18 = allPricesForLabel("18 Karat Gold")
+            val tradAll = allPricesForLabel("Traditional")
+
+            val silver22 = allPricesForLabel("22 Karat Silver")
+            val silver21 = allPricesForLabel("21 Karat Silver")
+            val silver18 = allPricesForLabel("18 Karat Silver")
+
+            if (gold22.isNotEmpty() && silver22.isNotEmpty()) {
+                fun g(list: List<Double>, i: Int): Double = list.getOrNull(i) ?: 0.0
+
+                val goldRates = KaratRates(
+                    k22 = g(gold22, 0),
+                    k21 = g(gold21, 0),
+                    k18 = g(gold18, 0),
+                    traditional = g(tradAll, 0)
+                )
+
+                val silverRates = KaratRates(
+                    k22 = g(silver22, 0),
+                    k21 = g(silver21, 0),
+                    k18 = g(silver18, 0),
+                    traditional = if (tradAll.size > 1) tradAll[1] else (g(silver18, 0) * 0.85)
+                )
+
+                val bajusRates = BajusRates(gold = goldRates, silver = silverRates, lastFetched = timeStr)
+                return@withContext Pair(bajusRates, "goldr.org (BAJUS)")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 2. Direct BAJUS official site scrape
+        try {
+            val doc = Jsoup.connect("https://www.bajus.org/gold-price")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .timeout(15000)
+                .get()
+
+            var g22 = 0.0; var g21 = 0.0; var g18 = 0.0; var gTrad = 0.0
+            var s22 = 0.0; var s21 = 0.0; var s18 = 0.0; var sTrad = 0.0
+
+            val rows = doc.select("table tbody tr")
+            for (row in rows) {
+                val text = row.text().lowercase(Locale.US)
+                val parsedNumbers = row.select("td").map { it.text().replace(Regex("[^0-9.]"), "") }
+                    .filter { it.isNotBlank() }
+                    .mapNotNull { it.toDoubleOrNull() }
+
+                if (parsedNumbers.isNotEmpty()) {
+                    val maxVal = parsedNumbers.maxOrNull() ?: 0.0
+                    val perGram = if (maxVal > 1000) maxVal / 11.664 else maxVal
+
+                    if (text.contains("gold")) {
+                        when {
+                            text.contains("22") -> g22 = perGram
+                            text.contains("21") -> g21 = perGram
+                            text.contains("18") -> g18 = perGram
+                            text.contains("traditional") || text.contains("sanaton") -> gTrad = perGram
+                        }
+                    } else if (text.contains("silver")) {
+                        when {
+                            text.contains("22") -> s22 = perGram
+                            text.contains("21") -> s21 = perGram
+                            text.contains("18") -> s18 = perGram
+                            text.contains("traditional") || text.contains("sanaton") -> sTrad = perGram
+                        }
+                    }
+                }
+            }
+
+            if (g22 > 0.0 && (s22 > 0.0 || sTrad > 0.0)) {
+                val goldRates = KaratRates(k22 = g22, k21 = if (g21 > 0) g21 else g22 * 21 / 22, k18 = if (g18 > 0) g18 else g22 * 18 / 22, traditional = if (gTrad > 0) gTrad else g22 * 14 / 22)
+                val silverRates = KaratRates(k22 = s22, k21 = if (s21 > 0) s21 else s22 * 21 / 22, k18 = if (s18 > 0) s18 else s22 * 18 / 22, traditional = if (sTrad > 0) sTrad else if (s22 > 0) s22 * 0.85 else 130.0)
+
+                val bajusRates = BajusRates(gold = goldRates, silver = silverRates, lastFetched = timeStr)
+                return@withContext Pair(bajusRates, "bajus.org")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 3. Fallback: Spot Metal APIs + FX Conversion
+        try {
+            val jsonGoldStr = Jsoup.connect("https://api.gold-api.com/price/XAU").ignoreContentType(true).timeout(10000).execute().body()
+            val jsonSilverStr = Jsoup.connect("https://api.gold-api.com/price/XAG").ignoreContentType(true).timeout(10000).execute().body()
+            val jsonFxStr = Jsoup.connect("https://open.er-api.com/v6/latest/USD").ignoreContentType(true).timeout(10000).execute().body()
+
+            val goldUSD = JSONObject(jsonGoldStr).getDouble("price")
+            val silverUSD = JSONObject(jsonSilverStr).getDouble("price")
+            val usdToBdt = JSONObject(jsonFxStr).optJSONObject("rates")?.optDouble("BDT", 122.0) ?: 122.0
+
+            val troyOunceToGrams = 31.1034768
+            val rawGoldGram = (goldUSD / troyOunceToGrams) * usdToBdt
+            val rawSilverGram = (silverUSD / troyOunceToGrams) * usdToBdt
+
+            fun kG(gram: Double, karat: Int) = Math.round(gram * karat / 24.0).toDouble()
+
+            val goldRates = KaratRates(k22 = kG(rawGoldGram, 22), k21 = kG(rawGoldGram, 21), k18 = kG(rawGoldGram, 18), traditional = kG(rawGoldGram, 14))
+            val silverRates = KaratRates(k22 = kG(rawSilverGram, 22), k21 = kG(rawSilverGram, 21), k18 = kG(rawSilverGram, 18), traditional = kG(rawSilverGram, 10))
+
+            val bajusRates = BajusRates(gold = goldRates, silver = silverRates, lastFetched = timeStr)
+            return@withContext Pair(bajusRates, "gold-api.com (Spot Fallback)")
+        } catch (e: Exception) {
+            throw Exception("Network connection unavailable.")
         }
     }
 
     fun setActiveTab(tab: String) = _uiState.update { it.copy(activeTab = tab) }
-    
+
     fun openSettingsModal() {
         _uiState.update { it.copy(showSettingsModal = true, settingsForm = it.settings) }
         if (_uiState.value.settings.priceSource == "auto" && _uiState.value.bajusFetchState == "idle") fetchBajusRates()
     }
-    
+
     fun closeSettingsModal() = _uiState.update { it.copy(showSettingsModal = false) }
-    
+
     fun updateSettingsForm(form: NisabSettings) {
         _uiState.update { it.copy(settingsForm = form) }
     }
@@ -390,8 +533,8 @@ class ZakatViewModel @Inject constructor(
     fun openPaymentModal(prefillAmt: Double? = null) {
         val remaining = maxOf(0.0, _uiState.value.zakatAmountDue - (_uiState.value.activeCycle?.totalPaid ?: 0.0))
         val amtToFill = prefillAmt ?: remaining
-        _uiState.update { 
-            it.copy(showPaymentModal = true, paymentAmount = String.format(Locale.US, "%.2f", amtToFill), paymentAccountId = it.accounts.firstOrNull()?.id ?: "") 
+        _uiState.update {
+            it.copy(showPaymentModal = true, paymentAmount = String.format(Locale.US, "%.2f", amtToFill), paymentAccountId = it.accounts.firstOrNull()?.id ?: "")
         }
     }
     fun closePaymentModal() = _uiState.update { it.copy(showPaymentModal = false) }
@@ -418,17 +561,16 @@ class ZakatViewModel @Inject constructor(
                     "silverRates" to mapOf("k22" to form.silverRates.k22, "k21" to form.silverRates.k21, "k18" to form.silverRates.k18, "traditional" to form.silverRates.traditional),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
-                
-                // Write offline-friendly
+
                 db.collection("users").document(uid).collection("settings").document("nisab_settings")
                     .set(data, SetOptions.merge())
-                
+
                 emitEvent(ZakatEvent.ShowToast("Nisab settings updated"))
                 closeSettingsModal()
-            } catch (e: Exception) { 
-                emitEvent(ZakatEvent.ShowToast("Failed to save", true)) 
-            } finally { 
-                _uiState.update { it.copy(isSaving = false) } 
+            } catch (e: Exception) {
+                emitEvent(ZakatEvent.ShowToast("Failed to save", true))
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }
@@ -440,20 +582,20 @@ class ZakatViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true) }
             try {
                 val data = mapOf(
-                    "cycleId" to UUID.randomUUID().toString(), 
-                    "status" to "active", 
+                    "cycleId" to UUID.randomUUID().toString(),
+                    "status" to "active",
                     "startDate" to state.cycleStartDate,
-                    "startWealth" to state.breakdown.netZakatableWealth, 
-                    "nisabAtStart" to state.settings.nisabThreshold, 
+                    "startWealth" to state.breakdown.netZakatableWealth,
+                    "nisabAtStart" to state.settings.nisabThreshold,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
-                db.collection("users").document(uid).collection("zakatCycles").document().set(data) // No .await()
+                db.collection("users").document(uid).collection("zakatCycles").document().set(data)
                 emitEvent(ZakatEvent.ShowToast("Zakat cycle started"))
                 closeStartCycleModal()
-            } catch (e: Exception) { 
-                emitEvent(ZakatEvent.ShowToast("Failed to start", true)) 
-            } finally { 
-                _uiState.update { it.copy(isSaving = false) } 
+            } catch (e: Exception) {
+                emitEvent(ZakatEvent.ShowToast("Failed to start", true))
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }
@@ -463,54 +605,50 @@ class ZakatViewModel @Inject constructor(
         val state = _uiState.value
         val cycle = state.activeCycle ?: return
         val amt = state.paymentAmount.toDoubleOrNull() ?: 0.0
-        if (amt <= 0 || state.paymentAccountId.isBlank()) { 
+        if (amt <= 0 || state.paymentAccountId.isBlank()) {
             emitEvent(ZakatEvent.ShowToast("Enter valid amount", true))
-            return 
+            return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
                 val batch = db.batch()
-                
-                // 1. Update Account Balance locally
+
                 val accRef = db.collection("users").document(uid).collection("accounts").document(state.paymentAccountId)
                 val currentBalance = state.accounts.find { it.id == state.paymentAccountId }?.balance ?: 0.0
                 batch.update(accRef, "balance", currentBalance - amt)
-                
-                // 2. Add Transaction Record
+
                 val txRef = db.collection("users").document(uid).collection("transactions").document()
                 val txData = mapOf(
-                    "type" to "Expense", 
-                    "amount" to amt, 
-                    "accountId" to state.paymentAccountId, 
-                    "description" to "Zakat Payment", 
-                    "date" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()), 
-                    "isZakatPayment" to true, 
+                    "type" to "Expense",
+                    "amount" to amt,
+                    "accountId" to state.paymentAccountId,
+                    "description" to "Zakat Payment",
+                    "date" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                    "isZakatPayment" to true,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
                 batch.set(txRef, txData)
 
-                // 3. Update Zakat Cycle
                 val newPaid = cycle.totalPaid + amt
                 val isFullyPaid = newPaid >= state.zakatAmountDue
                 val cycleRef = db.collection("users").document(uid).collection("zakatCycles").document(cycle.id)
                 val cycleUpdate = mutableMapOf<String, Any>("totalPaid" to newPaid)
-                if (isFullyPaid) { 
+                if (isFullyPaid) {
                     cycleUpdate["status"] = "paid"
-                    cycleUpdate["endDate"] = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) 
+                    cycleUpdate["endDate"] = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                 }
                 batch.update(cycleRef, cycleUpdate)
-                
-                // Commit Batch instantly
+
                 batch.commit()
-                
+
                 emitEvent(ZakatEvent.ShowToast(if (isFullyPaid) "JazakAllah! Zakat fully paid." else "Payment recorded"))
                 closePaymentModal()
-            } catch (e: Exception) { 
-                emitEvent(ZakatEvent.ShowToast("Payment failed", true)) 
-            } finally { 
-                _uiState.update { it.copy(isSaving = false) } 
+            } catch (e: Exception) {
+                emitEvent(ZakatEvent.ShowToast("Payment failed", true))
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }

@@ -75,16 +75,6 @@ fun CategoriesScreen(
                     }
                 }
             }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.openAddModal() },
-                containerColor = Color(0xFF111827),
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Category")
-            }
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -448,7 +438,7 @@ private fun AddEditCategoryModal(
                 // Selectable Button Row for Type (Replaces Dropdown)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Category Type", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
-                    
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -463,7 +453,7 @@ private fun AddEditCategoryModal(
                                 isSelected && type == "Expense" -> Color(0xFFDC2626)
                                 else -> Color.Transparent
                             }
-                            
+
                             Box(
                                 modifier = Modifier
                                     .weight(1f)

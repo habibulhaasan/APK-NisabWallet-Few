@@ -15,7 +15,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "3.0"
     }
 
     buildFeatures {
@@ -72,4 +72,6 @@ dependencies {
     implementation(libs.firebase.auth)       // Removed .ktx
     implementation(libs.firebase.firestore)  // Removed .ktx
     implementation(libs.material)
+
+    implementation("org.jsoup:jsoup:1.17.2")
 }

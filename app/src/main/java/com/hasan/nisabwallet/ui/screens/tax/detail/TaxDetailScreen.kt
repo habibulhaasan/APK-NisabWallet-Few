@@ -71,7 +71,7 @@ fun TaxDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color(0xFF4B5563))
                     }
                     Spacer(Modifier.width(16.dp))
-                    Text("Tax Year Details", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                    Text("Tax Year Details", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -89,34 +89,31 @@ fun TaxDetailScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ─── Header Card[cite: 15] ───
+            // ─── Header Card ───
             item {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Income Year ${taxYear.incomeYear}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                    Text("Income Year ${taxYear.incomeYear}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                     Spacer(Modifier.width(8.dp))
                                     StatusBadge(taxYear.status)
                                 }
                                 Text("Tax Year ${taxYear.taxYear} • ${formatDate(taxYear.fiscalYearStart)} - ${formatDate(taxYear.fiscalYearEnd)}", fontSize = 12.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 4.dp))
                                 Text("Filing Deadline: ${formatDate(taxYear.filingDeadline)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(top = 2.dp))
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 8.dp)) {
                                 IconButton(onClick = { viewModel.openProfileModal() }, modifier = Modifier.size(36.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))) {
                                     Icon(Icons.Default.Settings, "Profile", tint = Color(0xFF374151), modifier = Modifier.size(18.dp))
                                 }
-                                Button(
+                                IconButton(
                                     onClick = { viewModel.handleAnalyze() },
                                     enabled = !state.isAnalyzing,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.height(36.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp)
+                                    modifier = Modifier.size(36.dp).background(Color(0xFFDBEAFE), RoundedCornerShape(8.dp))
                                 ) {
-                                    if (state.isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), Color.White, 2.dp)
-                                    else { Icon(Icons.Default.Description, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("Analyze", fontSize = 12.sp) }
+                                    if (state.isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), Color(0xFF2563EB), 2.dp)
+                                    else Icon(Icons.Default.Description, "Analyze", tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
                                 }
                                 IconButton(onClick = { viewModel.requestDelete("taxYear", taxYear) }, modifier = Modifier.size(36.dp).background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp))) {
                                     Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
@@ -126,18 +123,23 @@ fun TaxDetailScreen(
 
                         HorizontalDivider(color = Color(0xFFF3F4F6), modifier = Modifier.padding(vertical = 16.dp))
 
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            MetricBox("Total Income", "৳${fmt(analysis.totalIncome)}", Color(0xFF16A34A), Modifier.weight(1f))
-                            MetricBox("Total Expenses", "৳${fmt(analysis.totalExpenses)}", Color(0xFFDC2626), Modifier.weight(1f))
-                            MetricBox("Savings", "৳${fmt(analysis.totalIncome - analysis.totalExpenses)}", Color(0xFF2563EB), Modifier.weight(1f))
-                            val savingsRate = if (analysis.totalIncome > 0) ((analysis.totalIncome - analysis.totalExpenses) / analysis.totalIncome * 100).toInt() else 0
-                            MetricBox("Savings Rate", "$savingsRate%", Color(0xFF111827), Modifier.weight(1f))
+                        // 2x2 Grid for Metrics on Mobile
+                        val savingsRate = if (analysis.totalIncome > 0) ((analysis.totalIncome - analysis.totalExpenses) / analysis.totalIncome * 100).toInt() else 0
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                MetricBox("Total Income", "৳${fmt(analysis.totalIncome)}", Color(0xFF16A34A), Modifier.weight(1f))
+                                MetricBox("Total Expenses", "৳${fmt(analysis.totalExpenses)}", Color(0xFFDC2626), Modifier.weight(1f))
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                MetricBox("Savings", "৳${fmt(analysis.totalIncome - analysis.totalExpenses)}", Color(0xFF2563EB), Modifier.weight(1f))
+                                MetricBox("Savings Rate", "$savingsRate%", Color(0xFF111827), Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
 
-            // ─── Warning if no mappings[cite: 15] ───
+            // ─── Warning if no mappings ───
             if (state.mappings.isEmpty()) {
                 item {
                     Row(Modifier.fillMaxWidth().background(Color(0xFFFEFCE8), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFEF08A), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
@@ -152,11 +154,11 @@ fun TaxDetailScreen(
                 }
             }
 
-            // ─── Income & Expense Analysis Grid[cite: 15] ───
+            // ─── Income & Expense Analysis Stacked ───
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // Income Analysis
-                    Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                                 Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
@@ -170,9 +172,9 @@ fun TaxDetailScreen(
                                     analysis.income.forEach { (catId, amt) ->
                                         val cat = TaxCategoryUtils.INCOME_TAX_CATEGORIES.find { it.id == catId }
                                         val pct = if (analysis.totalIncome > 0) String.format(Locale.US, "%.1f", (amt / analysis.totalIncome) * 100) else "0"
-                                        Row(Modifier.fillMaxWidth().background(Color(0xFFF0FDF4), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
+                                        Row(Modifier.fillMaxWidth().background(Color(0xFFF0FDF4), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
                                                 Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280))
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
@@ -187,7 +189,7 @@ fun TaxDetailScreen(
                     }
 
                     // Expense Analysis
-                    Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                                 Icon(Icons.AutoMirrored.Filled.TrendingDown, null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
@@ -201,9 +203,9 @@ fun TaxDetailScreen(
                                     analysis.expenses.entries.sortedByDescending { it.value }.take(10).forEach { (catId, amt) ->
                                         val cat = TaxCategoryUtils.ALL_EXPENSE_TAX_CATEGORIES.find { it.id == catId }
                                         val pct = if (analysis.totalExpenses > 0) String.format(Locale.US, "%.1f", (amt / analysis.totalExpenses) * 100) else "0"
-                                        Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
+                                        Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
                                                 Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280))
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
@@ -219,11 +221,11 @@ fun TaxDetailScreen(
                 }
             }
 
-            // ─── Assets & Liabilities[cite: 15] ───
+            // ─── Assets & Liabilities Stacked ───
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Assets Column
-                    Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Assets
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Assets", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -237,9 +239,9 @@ fun TaxDetailScreen(
                             } else {
                                 state.assets.forEach { asset ->
                                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(asset.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
-                                            Text(TaxCategoryUtils.ALL_EXPENSE_TAX_CATEGORIES.find { it.id == asset.assetType }?.name ?: asset.assetType, fontSize = 10.sp, color = Color(0xFF6B7280))
+                                        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                            Text(asset.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            Text(TaxCategoryUtils.ALL_EXPENSE_TAX_CATEGORIES.find { it.id == asset.assetType }?.name ?: asset.assetType, fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text("৳${fmt(asset.currentValue)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -257,8 +259,8 @@ fun TaxDetailScreen(
                         }
                     }
 
-                    // Liabilities Column
-                    Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    // Liabilities
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Liabilities", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -272,9 +274,9 @@ fun TaxDetailScreen(
                             } else {
                                 state.liabilities.forEach { l ->
                                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(l.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
-                                            Text(l.liabilityType, fontSize = 10.sp, color = Color(0xFF6B7280))
+                                        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                            Text(l.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            Text(l.liabilityType, fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text("৳${fmt(l.principal)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -297,7 +299,7 @@ fun TaxDetailScreen(
             item { Spacer(Modifier.height(40.dp)) }
         }
 
-        // ─── Modals[cite: 15] ───
+        // ─── Modals ───
         if (state.showAssetModal) {
             AssetModal(
                 editing = state.editingAsset,
@@ -355,8 +357,8 @@ private fun StatusBadge(status: String) {
 @Composable
 private fun MetricBox(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier.background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp)).padding(10.dp)) {
-        Text(label, fontSize = 10.sp, color = Color(0xFF6B7280))
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(top = 2.dp))
+        Text(label, fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

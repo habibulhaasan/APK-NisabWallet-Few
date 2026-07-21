@@ -75,8 +75,6 @@ import com.hasan.nisabwallet.ui.screens.analytics.AnalyticsScreen
 import com.hasan.nisabwallet.ui.screens.cashflow.CashflowScreen
 import com.hasan.nisabwallet.ui.screens.riba.RibaScreen
 import com.hasan.nisabwallet.ui.screens.zakat.ZakatScreen
-
-// Newly Added Screens
 import com.hasan.nisabwallet.ui.screens.subscription.SubscriptionScreen
 import com.hasan.nisabwallet.ui.screens.tax.TaxPreparationScreen
 import com.hasan.nisabwallet.ui.screens.tax.setup.TaxSetupScreen
@@ -136,11 +134,11 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Home),
     NavTabItem(Routes.ACCOUNTS, "Accounts", Icons.Default.AccountBalanceWallet),
     NavTabItem(Routes.TRANSACTIONS, "Transactions", Icons.Default.Receipt),
-    NavTabItem(Routes.ANALYTICS, "Analytics", Icons.Default.PieChart),
-    NavTabItem(Routes.CASHFLOW, "Cashflow", Icons.Default.SyncAlt),
-    NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
     NavTabItem(Routes.MONTHLY_LEDGER, "Monthly Ledger", Icons.Default.AccountBalance),
-    NavTabItem(Routes.MONTHLY_GROCERY, "Monthly Grocery", Icons.Default.ShoppingCart),
+    NavTabItem(Routes.MONTHLY_GROCERY, "Shopping List", Icons.Default.ShoppingCart),
+    NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
+    NavTabItem(Routes.GOALS, "Savings Goals", Icons.Default.TrackChanges),
+    NavTabItem(Routes.CASHFLOW, "Cashflow", Icons.Default.SyncAlt),
     NavTabItem(Routes.INVESTMENTS, "Investments", Icons.AutoMirrored.Filled.TrendingUp),
     NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
     NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
@@ -148,7 +146,8 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.TAX, "Tax Preparation", Icons.Default.Description),
     NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite),
     NavTabItem(Routes.RIBA, "Riba Tracker", Icons.Default.Warning),
-    NavTabItem(Routes.SETTINGS, "Profile & Settings", Icons.Default.Settings)
+    NavTabItem(Routes.ANALYTICS, "Analytics", Icons.Default.PieChart),
+    NavTabItem(Routes.SETTINGS, "Settings", Icons.Default.Settings)
 )
 
 @Composable
@@ -300,7 +299,7 @@ fun NisabWalletRootNav(
                                 Text(profileName.firstOrNull()?.uppercase() ?: "U", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text(profileName, color = drawerTextColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(profileName, color = drawerTextColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         }
 
                         // Logout Action
@@ -353,32 +352,25 @@ fun NisabWalletRootNav(
                         }
                     }
 
-                    // ─── Global Online/Offline Indicator ───
+                    // ─── Unobtrusive Status Dot at Top Right ───
                     Box(
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 22.dp)
+                            .align(Alignment.TopEnd)
+                            .padding(top = 32.dp, end = 24.dp)
                     ) {
-                        Surface(
-                            color = if (isOnline) Color(0xFFECFDF5) else Color(0xFFF3F4F6),
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, if (isOnline) Color(0xFFD1FAE5) else Color(0xFFE5E7EB)),
-                            shadowElevation = 1.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.size(6.dp).background(if (isOnline) Color(0xFF10B981) else Color(0xFF9CA3AF), CircleShape))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = if (isOnline) "Synced" else "Offline Mode",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isOnline) Color(0xFF065F46) else Color(0xFF4B5563)
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(
+                                    color = if (isOnline) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                    shape = CircleShape
                                 )
-                            }
-                        }
+                                .border(
+                                    width = 2.dp,
+                                    color = Color.White,
+                                    shape = CircleShape
+                                )
+                        )
                     }
                 }
 

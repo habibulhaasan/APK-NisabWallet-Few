@@ -50,7 +50,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
-    
+
     var showBalanceModal by remember { mutableStateOf(false) }
 
     if (state.isLoading) {
@@ -61,9 +61,8 @@ fun DashboardScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFFF9FAFB), // Light gray background
+        containerColor = Color(0xFFF9FAFB),
         topBar = {
-            // ─── Frozen Top Bar ───
             Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
@@ -71,14 +70,13 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(modifier = Modifier.width(48.dp)) // Clears the hamburger menu
+                        Spacer(modifier = Modifier.width(48.dp))
                         Column {
                             Text("Assalamu Alaikum, ${state.userName}!", fontSize = 13.sp, color = Color(0xFF6B7280))
                             Text("Nisab Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                         }
                     }
 
-                    // Sync Status Pill
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
@@ -105,7 +103,7 @@ fun DashboardScreen(
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 100.dp) // Padding for floating nav
+            contentPadding = PaddingValues(bottom = 100.dp)
         ) {
             item {
                 HeroBalanceCard(state.totalBalance, fmt, onClick = { showBalanceModal = true })
@@ -115,14 +113,22 @@ fun DashboardScreen(
                 MonthlySummaryPills(state.thisMonthIncome, state.thisMonthExpense, fmt)
             }
 
+            if (state.totalLoans > 0) {
+                item {
+                    LoanStatusCard(state.totalLoans, fmt, onNavigateToLoans)
+                }
+            }
+
             item {
                 ZakatStatusCard(state, fmt, onNavigateToZakat)
             }
 
             item {
                 QuickActionsRow(
-                    onNavigateToTransactions, onNavigateToAccounts, onNavigateToTransfer,
-                    onNavigateToJewellery, onNavigateToAnalytics
+                    onTransactions = onNavigateToTransactions,
+                    onAccounts = onNavigateToAccounts,
+                    onJewellery = onNavigateToJewellery,
+                    onAnalytics = onNavigateToAnalytics
                 )
             }
 
@@ -149,6 +155,34 @@ fun DashboardScreen(
 }
 
 @Composable
+private fun LoanStatusCard(totalLoans: Double, fmt: (Double) -> String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFFECACA))
+    ) {
+        Row(
+            modifier = Modifier.background(Brush.linearGradient(listOf(Color(0xFFFEF2F2), Color(0xFFFFF1F2)))).padding(20.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(40.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MoneyOff, null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text("Active Loans", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
+                    Text(fmt(totalLoans), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFFDC2626), modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
 private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
@@ -157,7 +191,7 @@ private fun HeroBalanceCard(balance: Double, fmt: (Double) -> String, onClick: (
             .clip(RoundedCornerShape(24.dp))
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF064E3B), Color(0xFF059669)) // Deep Emerald Gradient
+                    colors = listOf(Color(0xFF064E3B), Color(0xFF059669))
                 )
             )
             .clickable { onClick() }
@@ -232,9 +266,9 @@ private fun MonthlySummaryPills(income: Double, expense: Double, fmt: (Double) -
 @Composable
 private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() }, 
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White), 
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.dp, Color(0xFFD1FAE5))
     ) {
         Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFFECFDF5), Color(0xFFF0FDF4)))).padding(20.dp)) {
@@ -250,15 +284,15 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
             }
 
             Spacer(Modifier.height(16.dp))
-            
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) { 
+                Column(Modifier.weight(1f)) {
                     Text("Net Zakatable Wealth", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(fmt(state.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                    Text(fmt(state.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) { 
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                     Text("Nisab Threshold", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if(state.nisabThreshold>0) fmt(state.nisabThreshold) else "Not Set", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                    Text(if(state.nisabThreshold>0) fmt(state.nisabThreshold) else "Not Set", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
@@ -292,7 +326,6 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
 private fun QuickActionsRow(
     onTransactions: () -> Unit,
     onAccounts: () -> Unit,
-    onTransfer: () -> Unit,
     onJewellery: () -> Unit,
     onAnalytics: () -> Unit
 ) {
@@ -310,7 +343,6 @@ private fun QuickActionsRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { QuickActionItem("Records", Icons.Default.ReceiptLong, Color(0xFF3B82F6), Color(0xFFEFF6FF), onTransactions) }
-            item { QuickActionItem("Transfer", Icons.Default.SyncAlt, Color(0xFF8B5CF6), Color(0xFFF5F3FF), onTransfer) }
             item { QuickActionItem("Accounts", Icons.Default.AccountBalance, Color(0xFFF59E0B), Color(0xFFFFFBEB), onAccounts) }
             item { QuickActionItem("Jewellery", Icons.Default.Diamond, Color(0xFFD97706), Color(0xFFFFFBEB), onJewellery) }
             item { QuickActionItem("Analytics", Icons.Default.PieChart, Color(0xFFEC4899), Color(0xFFFDF2F8), onAnalytics) }
@@ -440,8 +472,6 @@ private fun RecentTransactionsSection(
     }
 }
 
-// ─── Modal Implementation ───
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BalanceBreakdownModal(
@@ -452,7 +482,7 @@ private fun BalanceBreakdownModal(
     onManageAccounts: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -472,7 +502,7 @@ private fun BalanceBreakdownModal(
                     Text(fmt(totalBalance), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF059669), fontFamily = FontFamily.Monospace)
                 }
                 Spacer(Modifier.height(16.dp))
-                
+
                 Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF9FAFB), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                     Column {
                         accounts.forEachIndexed { index, acc ->

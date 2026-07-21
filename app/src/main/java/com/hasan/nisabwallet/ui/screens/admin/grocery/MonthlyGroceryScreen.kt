@@ -379,41 +379,121 @@ private fun FilterBar(state: GroceryUiState, viewModel: MonthlyGroceryViewModel)
             shape = RoundedCornerShape(10.dp),
         )
 
-        Row(
-            modifier = Modifier.horizontalScrollRow(),
+        LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SegmentedFilter(
-                options = listOf("all" to "All", "bought" to "✓ Bought", "not_bought" to "Pending"),
-                selected = state.filterBought,
-                onSelect = { viewModel.setFilterBought(it) },
-            )
+            item {
+                SegmentedFilter(
+                    options = listOf("all" to "All", "bought" to "✓ Bought", "not_bought" to "Pending"),
+                    selected = state.filterBought,
+                    onSelect = { viewModel.setFilterBought(it) },
+                )
+            }
+
+            item {
+                CategoryFilterDropdown(
+                    categories = state.expenseCategories,
+                    selectedCategory = state.filterCategory,
+                    onSelectCategory = { viewModel.setFilterCategory(it) }
+                )
+            }
 
             val recordedCount = state.rows.count { it.curRecorded }
             if (recordedCount > 0) {
-                ToggleChip(
-                    label = if (state.showRecorded) "Hide recorded" else "Show recorded ($recordedCount)",
-                    active = state.showRecorded,
-                    activeBg = Emerald100, activeFg = Emerald800,
-                    onClick = { viewModel.toggleShowRecorded() },
-                )
+                item {
+                    ToggleChip(
+                        label = if (state.showRecorded) "Hide recorded" else "Show recorded ($recordedCount)",
+                        active = state.showRecorded,
+                        activeBg = Emerald100, activeFg = Emerald800,
+                        onClick = { viewModel.toggleShowRecorded() },
+                    )
+                }
             }
 
             val archivedCount = state.rows.count { it.archived }
             if (archivedCount > 0) {
-                ToggleChip(
-                    label = if (state.showArchived) "Hide archived" else "Archived ($archivedCount)",
-                    active = state.showArchived,
-                    activeBg = Amber100, activeFg = Amber700,
-                    onClick = { viewModel.toggleShowArchived() },
-                )
+                item {
+                    ToggleChip(
+                        label = if (state.showArchived) "Hide archived" else "Archived ($archivedCount)",
+                        active = state.showArchived,
+                        activeBg = Amber100, activeFg = Amber700,
+                        onClick = { viewModel.toggleShowArchived() },
+                    )
+                }
             }
         }
     }
 }
 
-private fun Modifier.horizontalScrollRow(): Modifier = this
+@Composable
+private fun CategoryFilterDropdown(
+    categories: List<GroceryCategoryItem>,
+    selectedCategory: String,
+    onSelectCategory: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedLabel = when (selectedCategory) {
+        "all" -> "All Categories"
+        "" -> "Uncategorized"
+        else -> categories.find { it.id == selectedCategory }?.name ?: "All Categories"
+    }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (selectedCategory != "all") Violet50 else Color.White)
+                .border(1.dp, if (selectedCategory != "all") Violet400 else Gray200, RoundedCornerShape(8.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(Icons.Default.Category, contentDescription = null, tint = if (selectedCategory != "all") Violet700 else Gray500, modifier = Modifier.size(13.dp))
+            Text(
+                text = selectedLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (selectedCategory != "all") Violet700 else Gray500,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = if (selectedCategory != "all") Violet700 else Gray500, modifier = Modifier.size(14.dp))
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(Color.White)
+        ) {
+            DropdownMenuItem(
+                text = { Text("All Categories", fontSize = 12.sp, fontWeight = if (selectedCategory == "all") FontWeight.Bold else FontWeight.Normal) },
+                onClick = {
+                    onSelectCategory("all")
+                    expanded = false
+                }
+            )
+            categories.forEach { cat ->
+                DropdownMenuItem(
+                    text = { Text(cat.name, fontSize = 12.sp, fontWeight = if (selectedCategory == cat.id) FontWeight.Bold else FontWeight.Normal) },
+                    onClick = {
+                        onSelectCategory(cat.id)
+                        expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Uncategorized", fontSize = 12.sp, fontWeight = if (selectedCategory == "") FontWeight.Bold else FontWeight.Normal) },
+                onClick = {
+                    onSelectCategory("")
+                    expanded = false
+                }
+            )
+        }
+    }
+}
 
 @Composable
 private fun SegmentedFilter(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {

@@ -23,7 +23,7 @@ data class DashboardUiState(
     val isLoading: Boolean = true,
     val userName: String = "User",
     val syncStatus: String = "Connecting...",
-    
+
     // Balances & Transactions
     val totalBalance: Double = 0.0,
     val accounts: List<DashboardAccount> = emptyList(),
@@ -31,7 +31,7 @@ data class DashboardUiState(
     val thisMonthExpense: Double = 0.0,
     val recentTransactions: List<DashboardTransaction> = emptyList(),
     val categories: Map<String, DashboardCategory> = emptyMap(),
-    
+
     // Zakat Status
     val nisabThreshold: Double = 0.0,
     val netZakatableWealth: Double = 0.0,
@@ -39,7 +39,10 @@ data class DashboardUiState(
     val zakatAmount: Double = 0.0,
     val zakatProgress: Float = 0f,
     val daysRemaining: Int = 0,
-    val activeCycleDate: String? = null
+    val activeCycleDate: String? = null,
+
+    // Loan Status
+    val totalLoans: Double = 0.0
 )
 
 data class DashboardTransaction(
@@ -91,8 +94,8 @@ class DashboardViewModel @Inject constructor(
         listeners.add(db.collection("users").document(uid).collection("accounts")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
-                    val accs = snap.documents.map { 
-                        DashboardAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "") 
+                    val accs = snap.documents.map {
+                        DashboardAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "")
                     }
                     accTotal = accs.sumOf { it.balance }
                     _uiState.update { it.copy(accounts = accs, totalBalance = accTotal) }
@@ -207,6 +210,7 @@ class DashboardViewModel @Inject constructor(
 
         listeners.add(db.collection("users").document(uid).collection("loans").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
             loanTotal = snap?.documents?.sumOf { it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0 } ?: 0.0
+            _uiState.update { it.copy(totalLoans = loanTotal) } // Publish loan total to UI
             recalculateZakat()
         })
     }
@@ -242,11 +246,11 @@ class DashboardViewModel @Inject constructor(
             }
         }
 
-        _uiState.update { 
+        _uiState.update {
             it.copy(
-                netZakatableWealth = netWealth, zakatStatus = status, zakatAmount = amt, 
+                netZakatableWealth = netWealth, zakatStatus = status, zakatAmount = amt,
                 zakatProgress = progress, daysRemaining = daysRem, activeCycleDate = activeCycleDate
-            ) 
+            )
         }
     }
 
