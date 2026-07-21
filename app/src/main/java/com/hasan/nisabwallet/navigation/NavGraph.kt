@@ -178,12 +178,14 @@ fun NisabWalletRootNav(
         val actions = mutableListOf<NavTabItem>()
 
         val contextualAction = when (currentRoute) {
+            Routes.TRANSACTIONS -> NavTabItem("action_add", "Add Transaction", Icons.Default.AddCard)
             Routes.JEWELLERY -> NavTabItem("action_add", "Add Jewellery", Icons.Default.Diamond)
             Routes.LOANS -> NavTabItem("action_add", "Add Loan Record", Icons.Default.AccountBalance)
             Routes.LENDINGS -> NavTabItem("action_add", "Add Lending Record", Icons.Default.Money)
             Routes.INVESTMENTS -> NavTabItem("action_add", "Add Investment", Icons.AutoMirrored.Filled.TrendingUp)
             Routes.ACCOUNTS -> NavTabItem("action_add", "Add Account", Icons.Default.AccountBalanceWallet)
             Routes.CATEGORIES -> NavTabItem("action_add", "Add Category", Icons.Default.Category)
+            Routes.MONTHLY_GROCERY -> NavTabItem("action_add", "Add Grocery Item", Icons.Default.ShoppingCart)
             else -> null
         }
 
@@ -199,7 +201,7 @@ fun NisabWalletRootNav(
             actions.add(defaultItem)
         }
 
-        if (actions.none { it.route == Routes.TRANSACTIONS }) {
+        if (actions.none { it.route == Routes.TRANSACTIONS && it.label == "New Transaction" }) {
             actions.add(NavTabItem(Routes.TRANSACTIONS, "New Transaction", Icons.Default.AddCard))
         }
         actions.add(NavTabItem(Routes.TRANSFER, "Transfer Funds", Icons.Default.SwapHoriz))
@@ -220,14 +222,12 @@ fun NisabWalletRootNav(
             ) {
                 Column(Modifier.fillMaxSize()) {
 
-                    // ─── Header Section (Custom Image Logo + App Name) ───
+                    // ─── Header Section ───
                     Column(modifier = Modifier.padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 20.dp)) {
                         Image(
-                            painter = painterResource(id = R.drawable.nisab_logo), // Place your image in res/drawable/app_logo.png
+                            painter = painterResource(id = R.drawable.nisab_logo),
                             contentDescription = "Nisab Wallet Logo",
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape),
+                            modifier = Modifier.size(56.dp).clip(CircleShape),
                             contentScale = ContentScale.Fit
                         )
                         Spacer(Modifier.height(16.dp))
@@ -267,7 +267,7 @@ fun NisabWalletRootNav(
                         }
                     }
 
-                    // ─── Fixed Footer Section (Profile & Logout) ───
+                    // ─── Fixed Footer Section ───
                     HorizontalDivider(color = dividerColor)
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
@@ -461,6 +461,7 @@ fun NisabWalletNavGraph(
         }
 
         composable(Routes.DASHBOARD) {
+            // Explicitly map all Dashboard routing functions to ensure clean, accurate navigation
             DashboardScreen(
                 onNavigateToTransactions = { navController.navigate(Routes.TRANSACTIONS) },
                 onNavigateToAccounts     = { navController.navigate(Routes.ACCOUNTS) },
@@ -471,7 +472,7 @@ fun NisabWalletNavGraph(
                 onNavigateToJewellery    = { navController.navigate(Routes.JEWELLERY) },
                 onNavigateToInvestments  = { navController.navigate(Routes.INVESTMENTS) },
                 onNavigateToAnalytics    = { navController.navigate(Routes.ANALYTICS) },
-                onNavigateToZakat        = { navController.navigate(Routes.ZAKAT) },
+                onNavigateToZakat        = { navController.navigate(Routes.ZAKAT) }
             )
         }
 
@@ -485,64 +486,46 @@ fun NisabWalletNavGraph(
             )
         }
 
-        composable(Routes.MONTHLY_LEDGER) {
-            MonthlyLedgerScreen(
-                onNavigateToDashboard = {
-                    navController.navigate(Routes.DASHBOARD) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
-                    }
-                },
-            )
-        }
-
-        composable(Routes.MONTHLY_GROCERY) { backStackEntry ->
+        composable(Routes.ACCOUNTS) { backStackEntry ->
             val savedStateHandle = backStackEntry.savedStateHandle
             val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
 
-            MonthlyGroceryScreen(
+            AccountsScreen(
                 triggerFabAdd = trigger,
                 onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
-                onNavigateToDashboard = {
-                    navController.navigate(Routes.DASHBOARD) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
-                    }
-                },
-            )
-        }
-
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
-                onNavigateToLogin = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                onNavigateToSubscription = {
-                    navController.navigate(Routes.SUBSCRIPTION)
-                }
-            )
-        }
-
-        composable(Routes.ACCOUNTS) {
-            AccountsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.CATEGORIES) {
+        composable(Routes.CATEGORIES) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             CategoriesScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.JEWELLERY) {
+        composable(Routes.JEWELLERY) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             JewelleryScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Routes.INVESTMENTS) {
+        composable(Routes.INVESTMENTS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
             InvestmentsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToDetail = { id: String -> navController.navigate(Routes.createInvestmentDetailRoute(id)) }
             )
@@ -601,6 +584,40 @@ fun NisabWalletNavGraph(
             )
         }
 
+        composable(Routes.MONTHLY_GROCERY) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
+            MonthlyGroceryScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
+                onNavigateToDashboard = {
+                    navController.navigate(Routes.DASHBOARD) {
+                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Routes.MONTHLY_LEDGER) {
+            MonthlyLedgerScreen(
+                onNavigateToDashboard = {
+                    navController.navigate(Routes.DASHBOARD) {
+                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onNavigateToLogin = {
+                    navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                },
+                onNavigateToSubscription = { navController.navigate(Routes.SUBSCRIPTION) }
+            )
+        }
+
         composable(Routes.ZAKAT) {
             ZakatScreen()
         }
@@ -617,6 +634,7 @@ fun NisabWalletNavGraph(
             )
         }
 
+        // Accurately mapped Riba Tracker
         composable(Routes.RIBA) {
             RibaScreen(
                 onNavigateBack = { navController.popBackStack() }

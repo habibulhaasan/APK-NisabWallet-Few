@@ -92,7 +92,7 @@ fun JewelleryScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp), // Extra padding for FAB
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Add Button
@@ -188,7 +188,6 @@ fun JewelleryScreen(
                             onDelete = { viewModel.openDeleteConfirm(item) }
                         )
                     }
-                    item { Spacer(Modifier.height(40.dp)) }
                 }
             }
         }
@@ -385,7 +384,7 @@ private fun AddEditJewelleryModal(
         Crossfade(targetState = currentView, label = "JewelleryModal") { view ->
             when (view) {
                 "form" -> {
-                    Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()) {
+                    Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(if(form.id != null) "Edit Jewellery" else "Add Jewellery", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
@@ -608,7 +607,7 @@ private fun SellJewelleryModal(
         Crossfade(targetState = currentView, label = "SellModal") { view ->
             when (view) {
                 "form" -> {
-                    Column(Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
+                    Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(bottom = 16.dp)) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Sell Jewellery", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp)) }
@@ -718,7 +717,7 @@ private fun GenericSelectionList(
     title: String, items: List<Pair<String, String>>, selectedValue: String,
     onSelect: (String) -> Unit, onBack: () -> Unit, icon: ImageVector
 ) {
-    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()) {
+    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()) {
         SubSheetHeader(title = title, onBack = onBack)
         LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items) { item ->

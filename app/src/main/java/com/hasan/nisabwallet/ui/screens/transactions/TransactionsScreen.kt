@@ -140,16 +140,6 @@ fun TransactionsScreen(
                     }
                 }
             }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.showAddSheet("Expense") },
-                containerColor = Color(0xFF111827),
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Transaction")
-            }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).pullRefresh(pullRefreshState)) {

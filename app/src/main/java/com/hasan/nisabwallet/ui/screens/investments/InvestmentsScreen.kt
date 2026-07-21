@@ -53,6 +53,7 @@ fun InvestmentsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
 
+    // ─── Trigger Add Modal via Global Navigation FAB ───
     LaunchedEffect(triggerFabAdd) {
         if (triggerFabAdd > 0L) {
             viewModel.openAddModal()
@@ -90,7 +91,7 @@ fun InvestmentsScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp), // Extra padding at bottom for FAB
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -212,7 +213,6 @@ fun InvestmentsScreen(
                             InvestmentCard(inv = inv, fmt = fmt, onClick = { onNavigateToDetail(inv.id) })
                         }
                     }
-                    item { Spacer(Modifier.height(40.dp)) }
                 }
             }
         }
@@ -268,7 +268,7 @@ private fun AddEditInvestmentModal(
         Crossfade(targetState = currentView, label = "InvestmentModal") { view ->
             when (view) {
                 "form" -> {
-                    Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()) {
+                    Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()) {
                         // Header
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(if (form.id != null) "Edit Investment" else "Add Investment", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
@@ -279,7 +279,7 @@ private fun AddEditInvestmentModal(
                         // Scrollable Form
                         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-                            // Type & Account (Drill-downs remain since they have many options)
+                            // Type & Account Drill-downs
                             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))) {
                                 DrillDownRow(
                                     label = "Investment Type *",
@@ -325,7 +325,7 @@ private fun AddEditInvestmentModal(
                                 OutlinedTextField(value = form.currentValue, onValueChange = { v -> onUpdateForm { it.copy(currentValue = v) } }, label = { Text("Current Value/Unit") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             }
 
-                            // ─── Selectable Segments instead of DrillDown for small arrays ───
+                            // Selectable Segments for Status
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Status", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -338,6 +338,7 @@ private fun AddEditInvestmentModal(
                                 }
                             }
 
+                            // Selectable Segments for Risk Level
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Risk Level", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

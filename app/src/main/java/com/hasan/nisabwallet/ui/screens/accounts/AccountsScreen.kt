@@ -69,33 +69,41 @@ fun AccountsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = Color(0xFFF9FAFB),
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(modifier = Modifier.width(48.dp)) // Clears the floating hamburger menu
+                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text("Accounts", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Manage your financial accounts", fontSize = 12.sp, color = Color(0xFF6B7280))
+                        }
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.openAddModal() },
+                containerColor = Color(0xFF111827),
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Account")
+            }
+        }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(modifier = Modifier.width(56.dp)) // Drawer padding
-                                Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Accounts", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                            }
-                            Text("Manage your financial accounts", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 88.dp))
-                        }
-                    }
-                }
 
                 // Action Buttons
                 item {
@@ -186,7 +194,6 @@ fun AccountsScreen(
                             onDelete = { accountToDelete = it }
                         )
                     }
-                    item { Spacer(Modifier.height(40.dp)) }
                 }
             }
 
@@ -370,7 +377,7 @@ private fun AddEditAccountModal(
             when (view) {
                 "form" -> {
                     Column(
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()
                     ) {
                         // Header
                         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,34 +59,41 @@ fun CategoriesScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFFF9FAFB)
+        containerColor = Color(0xFFF9FAFB),
+        topBar = {
+            // ─── Frozen Top Bar ───
+            Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(modifier = Modifier.width(48.dp)) // Clears the floating hamburger menu
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF111827), modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text("Categories", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Organize your transactions", fontSize = 12.sp, color = Color(0xFF6B7280))
+                        }
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.openAddModal() },
+                containerColor = Color(0xFF111827),
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Category")
+            }
+        }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header with Offset Spacer for Left Drawer Toggle
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(modifier = Modifier.width(56.dp))
-                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF111827), modifier = Modifier.size(28.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Categories", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                            }
-                            Text("Organize your transactions", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(start = 92.dp))
-                        }
-                    }
-                }
-
                 // Action Buttons
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -246,8 +254,6 @@ fun CategoriesScreen(
                             }
                         }
                     }
-
-                    item { Spacer(Modifier.height(40.dp)) }
                 }
             }
 
@@ -375,29 +381,6 @@ private fun CategoryCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AppDropdown(
-    label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, enabled: Boolean = true
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded && enabled, onExpandedChange = { if (enabled) expanded = it }, modifier = modifier) {
-        OutlinedTextField(
-            value = value, onValueChange = {}, readOnly = true, label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
-                disabledContainerColor = Color(0xFFF9FAFB),
-                disabledTextColor = Color(0xFF9CA3AF)
-            ),
-            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(10.dp), enabled = enabled
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
-            options.forEach { opt -> DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false }) }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddEditCategoryModal(
@@ -408,13 +391,15 @@ private fun AddEditCategoryModal(
     onSave: () -> Unit
 ) {
     val colorsList = listOf("#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16", "#F97316")
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = Color.White
     ) {
-        Column(modifier = Modifier.fillMaxWidth().imePadding().padding(bottom = 16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(bottom = 16.dp)) {
 
             // Header
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -460,13 +445,44 @@ private fun AddEditCategoryModal(
                     )
                 )
 
-                AppDropdown(
-                    label = "Type",
-                    value = form.type,
-                    options = listOf("Income", "Expense"),
-                    onSelect = { selectedType -> onUpdateForm { it.copy(type = selectedType) } },
-                    enabled = !form.isSystem
-                )
+                // Selectable Button Row for Type (Replaces Dropdown)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Category Type", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFF3F4F6)),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        listOf("Income", "Expense").forEach { type ->
+                            val isSelected = form.type == type
+                            val bgColor = when {
+                                isSelected && type == "Income" -> Color(0xFF16A34A)
+                                isSelected && type == "Expense" -> Color(0xFFDC2626)
+                                else -> Color.Transparent
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(bgColor)
+                                    .clickable(enabled = !form.isSystem) { onUpdateForm { it.copy(type = type) } }
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = type,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isSelected) Color.White else Color(0xFF4B5563)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Column {
                     Text("Select Color", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF374151), modifier = Modifier.padding(bottom = 12.dp))
