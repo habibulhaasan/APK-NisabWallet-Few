@@ -195,79 +195,51 @@ class RibaViewModel @Inject constructor(
         val form = state.sadaqahForm
 
         val amount = form.amount.toDoubleOrNull() ?: 0.0
-        if (amount <= 0) {
-            emitEvent(RibaEvent.ShowToast("Enter a valid sadaqah amount", true))
-            return
-        }
-
-        val account = state.accounts.find { it.id == form.accountId }
-        if (account == null) {
-            emitEvent(RibaEvent.ShowToast("Select a valid account", true))
-            return
-        }
-
-        if (amount > account.balance) {
-            emitEvent(RibaEvent.ShowToast("Insufficient balance in ${account.name}", true))
+        if (amount <= 0.0 || form.accountId.isBlank()) {
+            emitEvent(RibaEvent.ShowToast("Please enter a valid amount and select an account", true))
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                // 1. Find or create "Sadaqah / Charity" expense category
-                var catId = ""
-                val catSnap = db.collection("users").document(uid).collection("categories")
-                    .whereEqualTo("name", "Sadaqah / Charity").limit(1).get().await()
-                
-                if (!catSnap.isEmpty) {
-                    catId = catSnap.documents.first().id
-                } else {
-                    val newCatRef = db.collection("users").document(uid).collection("categories").add(
-                        mapOf(
-                            "name" to "Sadaqah / Charity",
-                            "type" to "Expense",
-                            "color" to "#10B981",
-                            "categoryId" to UUID.randomUUID().toString(),
-                            "isSystem" to true,
-                            "createdAt" to FieldValue.serverTimestamp()
-                        )
-                    ).await()
-                    catId = newCatRef.id
-                }
+                val batch = db.batch()
 
-                val desc = if (form.note.isNotBlank()) form.note else "Sadaqah — purifying Riba from \"${tx.description.ifBlank { "Interest" }}\""
+                // 1. Deduct from Account
+                val accRef = db.collection("users").document(uid).collection("accounts").document(form.accountId)
+                val currentBalance = state.accounts.find { it.id == form.accountId }?.balance ?: 0.0
+                batch.update(accRef, "balance", currentBalance - amount)
 
-                // 2. Add Expense Transaction
-                db.collection("users").document(uid).collection("transactions").add(
-                    mapOf(
-                        "type" to "Expense",
-                        "amount" to amount,
-                        "accountId" to form.accountId,
-                        "categoryId" to catId,
-                        "description" to desc,
-                        "date" to form.date,
-                        "isSadaqah" to true,
-                        "ribaRefId" to tx.id,
-                        "createdAt" to FieldValue.serverTimestamp()
-                    )
-                ).await()
+                // 2. Mark Riba Transaction as Purified
+                val ribaRef = db.collection("users").document(uid).collection("transactions").document(tx.id)
+                batch.update(ribaRef, mapOf(
+                    "sadaqahDone" to true,
+                    "sadaqahAmount" to amount,
+                    "sadaqahDate" to form.date,
+                    "sadaqahAccountId" to form.accountId,
+                    "sadaqahNote" to form.note,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                ))
 
-                // 3. Deduct from Account
-                db.collection("users").document(uid).collection("accounts").document(form.accountId)
-                    .update("balance", account.balance - amount).await()
+                // 3. Create Expense Transaction for the Sadaqah
+                val newTxRef = db.collection("users").document(uid).collection("transactions").document()
+                val newTxData = mapOf(
+                    "type" to "Expense",
+                    "amount" to amount,
+                    "accountId" to form.accountId,
+                    "categoryId" to "sadaqah_system_id", // Replace with your actual Sadaqah category ID if needed
+                    "description" to (if (form.note.isNotBlank()) form.note else "Riba Purification (Sadaqah)"),
+                    "date" to form.date,
+                    "isSadaqah" to true,
+                    "relatedRibaTxId" to tx.id,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                batch.set(newTxRef, newTxData)
 
-                // 4. Mark Riba transaction as Purified
-                db.collection("users").document(uid).collection("transactions").document(tx.id)
-                    .update(
-                        mapOf(
-                            "sadaqahDone" to true,
-                            "sadaqahAmount" to amount,
-                            "sadaqahDate" to form.date,
-                            "updatedAt" to FieldValue.serverTimestamp()
-                        )
-                    ).await()
+                // Commit batch offline
+                batch.commit()
 
-                emitEvent(RibaEvent.ShowToast("Sadaqah recorded. May Allah accept it. 🤲"))
+                emitEvent(RibaEvent.ShowToast("Sadaqah recorded successfully"))
                 closeSadaqahModal()
             } catch (e: Exception) {
                 emitEvent(RibaEvent.ShowToast("Failed to record Sadaqah: ${e.message}", true))

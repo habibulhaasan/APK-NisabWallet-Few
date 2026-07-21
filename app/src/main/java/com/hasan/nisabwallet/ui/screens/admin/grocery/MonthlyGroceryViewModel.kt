@@ -417,90 +417,49 @@ class MonthlyGroceryViewModel @Inject constructor(
     fun confirmRecord() {
         val uid = auth.currentUser?.uid ?: return
         val state = _uiState.value
-        
+        val confirm = state.confirmState
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                if (state.dirtyItemIds.isNotEmpty()) saveMonth()
+                val batch = db.batch()
+                val recordable = state.rows.filter { it.curBought && !it.curRecorded && !it.archived }
+                val totalAmount = recordable.sumOf { it.curBoughtPrice ?: (it.curQty * it.curUnitPrice) }
 
-                val toRecord = state.rows.filter { it.curBought && !it.curRecorded && !it.archived }
-                if (toRecord.isEmpty()) throw Exception("No items to record")
+                // 1. Deduct from account
+                val accRef = db.collection("users").document(uid).collection("accounts").document(confirm.accountId)
+                val accBal = state.accounts.find { it.id == confirm.accountId }?.balance ?: 0.0
+                batch.update(accRef, "balance", accBal - totalAmount)
 
-                val cState = state.confirmState
-                val acc = state.accounts.find { it.id == cState.accountId } ?: throw Exception("Invalid account")
+                // 2. Create Transaction
+                val txRef = db.collection("users").document(uid).collection("transactions").document()
+                val txData = mapOf(
+                    "type" to "Expense",
+                    "amount" to totalAmount,
+                    "accountId" to confirm.accountId,
+                    "categoryId" to confirm.categoryId,
+                    "description" to confirm.note.ifBlank { "Monthly Grocery" },
+                    "date" to confirm.date,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                batch.set(txRef, txData)
 
-                val groupRows = toRecord.filter { it.isGroupItem }
-                val indivRows = toRecord.filter { !it.isGroupItem }
+                // 3. Mark grocery items as recorded
+                val monthRef = db.collection("users").document(uid)
+                    .collection("groceryMonths").document("${state.curYear}-${state.curMonth + 1}")
+                val currentRecorded = state.monthData["${state.curYear}-${state.curMonth + 1}"]?.recordedItemIds ?: emptyList()
+                val newRecordedIds = currentRecorded + recordable.map { it.itemId }
+                
+                batch.set(monthRef, mapOf("recordedItemIds" to newRecordedIds), SetOptions.merge())
+                
+                batch.commit() // Instant offline commit
 
-                val txIds = mutableListOf<String>()
-                var grandTotal = 0.0
-                val notePrefix = if (cState.note.isNotBlank()) "${cState.note} — " else ""
-
-                val groupBuckets = groupRows.groupBy { "${it.category}::${it.groupPriceTotal}" }
-                for ((_, bRows) in groupBuckets) {
-                    val first = bRows.first()
-                    val catId = if (first.category.isBlank()) cState.categoryId else first.category
-                    val catName = state.expenseCategories.find { it.id == catId }?.name ?: "Uncategorized"
-                    val total = first.groupPriceTotal ?: 0.0
-
-                    val itemsDesc = bRows.joinToString(", ") { "${it.name} ×${it.curQty}" }
-                    val desc = "${notePrefix}Groceries [${catName} - Group]: $itemsDesc"
-
-                    val txRef = db.collection("users").document(uid).collection("transactions").add(mapOf(
-                        "type" to "Expense", "amount" to total, "accountId" to cState.accountId,
-                        "categoryId" to catId, "description" to desc, "date" to cState.date,
-                        "isGrocery" to true, "groceryMonth" to fmtYm(state.curYear, state.curMonth),
-                        "createdAt" to FieldValue.serverTimestamp()
-                    )).await()
-                    
-                    txIds.add(txRef.id)
-                    grandTotal += total
-                }
-
-                val indivBuckets = indivRows.groupBy { it.category }
-                for ((origCatId, cRows) in indivBuckets) {
-                    val catId = if (origCatId.isBlank()) cState.categoryId else origCatId
-                    val catName = state.expenseCategories.find { it.id == catId }?.name ?: "Uncategorized"
-                    val total = cRows.sumOf { it.curBoughtPrice ?: (it.curQty * it.curUnitPrice) }
-
-                    val itemsDesc = cRows.joinToString(", ") { "${it.name} ×${it.curQty}" }
-                    val desc = "${notePrefix}Groceries [${catName}]: $itemsDesc"
-
-                    val txRef = db.collection("users").document(uid).collection("transactions").add(mapOf(
-                        "type" to "Expense", "amount" to total, "accountId" to cState.accountId,
-                        "categoryId" to catId, "description" to desc, "date" to cState.date,
-                        "isGrocery" to true, "groceryMonth" to fmtYm(state.curYear, state.curMonth),
-                        "createdAt" to FieldValue.serverTimestamp()
-                    )).await()
-
-                    txIds.add(txRef.id)
-                    grandTotal += total
-                }
-
-                db.collection("users").document(uid).collection("accounts").document(acc.id)
-                    .update("balance", acc.balance - grandTotal).await()
-
-                val curYm = fmtYm(state.curYear, state.curMonth)
-                val prevRecorded = state.monthData[curYm]?.recordedItemIds ?: emptyList()
-                val prevTxIds = state.monthData[curYm]?.transactionIds ?: emptyList()
-                val newRecorded = (prevRecorded + toRecord.map { it.itemId }).distinct()
-
-                db.collection("users").document(uid).collection("groceryMonths").document(curYm)
-                    .set(mapOf(
-                        "confirmedAt" to FieldValue.serverTimestamp(),
-                        "transactionIds" to (prevTxIds + txIds),
-                        "transactionId" to (txIds.firstOrNull() ?: ""),
-                        "totalAmount" to (state.monthData[curYm]?.totalAmount ?: 0.0) + grandTotal,
-                        "accountId" to cState.accountId,
-                        "categoryId" to cState.categoryId,
-                        "recordedItemIds" to newRecorded
-                    ), SetOptions.merge()).await()
-
-                _uiState.update { it.copy(showConfirmModal = false, isSaving = false) }
-                emit(GroceryEvent.ShowToast("Recorded $grandTotal successfully!"))
+                emit(GroceryEvent.ShowToast("Expense recorded successfully"))
+                closeConfirmModal()
             } catch (e: Exception) {
+                emit(GroceryEvent.ShowToast("Failed to record: ${e.message}", true))
+            } finally {
                 _uiState.update { it.copy(isSaving = false) }
-                emit(GroceryEvent.ShowToast("Recording failed: ${e.message}", true))
             }
         }
     }

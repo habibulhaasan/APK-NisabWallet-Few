@@ -386,40 +386,45 @@ class JewelleryViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         val form = _uiState.value.sellForm
         val item = _uiState.value.selectedItem ?: return
-
-        val amount = form.saleAmount.toDoubleOrNull()
-        if (amount == null || amount <= 0) { emitEvent(JewelleryEvent.ShowToast("Enter a valid sale amount", true)); return }
-        val acc = rawAccounts.find { it.id == form.accountId }
-        if (acc == null) { emitEvent(JewelleryEvent.ShowToast("Select an account", true)); return }
-
+        
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                val catId = ensureRedemptionCategory(uid)
-                val txRef = db.collection("users").document(uid).collection("transactions").add(
-                    mapOf(
-                        "type" to "Income", "amount" to amount, "accountId" to acc.id,
-                        "categoryId" to catId, "description" to "Jewellery sold: ${item.name}",
-                        "date" to form.saleDate, "source" to "jewellery_sale", "jewelleryId" to item.id,
+                val batch = db.batch()
+                val saleAmount = form.saleAmount.toDoubleOrNull() ?: 0.0
+                
+                // 1. Mark Jewellery as Sold
+                val jewRef = db.collection("users").document(uid).collection("jewellery").document(item.id)
+                batch.update(jewRef, mapOf(
+                    "status" to "sold",
+                    "soldPrice" to saleAmount,
+                    "soldDate" to form.saleDate,
+                    "soldNotes" to form.notes,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                ))
+                
+                // 2. Add Funds to Account & Create Transaction
+                if (form.accountId.isNotBlank()) {
+                    val accRef = db.collection("users").document(uid).collection("accounts").document(form.accountId)
+                    val currentBal = _uiState.value.accounts.find { it.id == form.accountId }?.balance ?: 0.0
+                    batch.update(accRef, "balance", currentBal + saleAmount)
+                    
+                    val txRef = db.collection("users").document(uid).collection("transactions").document()
+                    batch.set(txRef, mapOf(
+                        "type" to "Income",
+                        "amount" to saleAmount,
+                        "accountId" to form.accountId,
+                        "description" to "Sold Jewellery: ${item.name}",
+                        "date" to form.saleDate,
                         "createdAt" to FieldValue.serverTimestamp()
-                    )
-                ).await()
-
-                db.collection("users").document(uid).collection("accounts").document(acc.id)
-                    .update("balance", acc.balance + amount).await()
-
-                db.collection("users").document(uid).collection("jewellery").document(item.id).update(
-                    mapOf(
-                        "status" to "sold", "soldAt" to form.saleDate, "soldPrice" to amount,
-                        "soldNotes" to form.notes.trim(), "soldToAccountId" to acc.id,
-                        "saleTransactionId" to txRef.id, "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                ).await()
-
-                emitEvent(JewelleryEvent.ShowToast("${item.name} sold! Money added to account."))
+                    ))
+                }
+                
+                batch.commit()
+                emitEvent(JewelleryEvent.ShowToast("Jewellery marked as sold!"))
                 closeSellModal()
             } catch (e: Exception) {
-                emitEvent(JewelleryEvent.ShowToast("Failed to process sale: ${e.message}", true))
+                emitEvent(JewelleryEvent.ShowToast("Failed to process sale", true))
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
             }

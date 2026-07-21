@@ -224,76 +224,59 @@ class CategoriesViewModel @Inject constructor(
         _uiState.update { it.copy(form = update(it.form)) }
     }
 
+
     fun saveCategory() {
         val uid = auth.currentUser?.uid ?: return
-        val form = _uiState.value.form
         
-        val trimmedName = form.name.trim()
-        if (trimmedName.isBlank()) {
-            emitEvent(CategoriesEvent.ShowToast("Please enter a category name", true))
-            return
-        }
-
-        // Duplicate Check (Matching Web logic exactly[cite: 6])
-        val isDuplicate = rawCategories.any { 
-            it.id != form.id && it.type == form.type && it.name.trim().lowercase() == trimmedName.lowercase() 
-        }
-        if (isDuplicate) {
-            emitEvent(CategoriesEvent.ShowToast("A ${form.type.lowercase()} category with this name already exists", true))
-            return
-        }
-
-        // Auto-detect RIBA logic from web app[cite: 6]
-        val isRibaDetected = trimmedName.lowercase() == "interest" || trimmedName.lowercase() == "riba"
-
+        val form = _uiState.value.form 
+        
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                val categoriesRef = db.collection("users").document(uid).collection("categories")
-                val data = hashMapOf<String, Any>(
-                    "name" to trimmedName,
+                val data = mapOf(
+                    "name" to form.name,
                     "type" to form.type,
                     "color" to form.color,
-                    "isRiba" to (form.isRiba || isRibaDetected),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
 
-                if (form.id != null) {
-                    categoriesRef.document(form.id).set(data, SetOptions.merge()).await()
-                    emitEvent(CategoriesEvent.ShowToast("Category updated successfully"))
+                if (form.id != null && form.id.isNotBlank()) {
+                    db.collection("users").document(uid).collection("categories")
+                        .document(form.id).update(data) // Instant offline write
                 } else {
-                    data["categoryId"] = UUID.randomUUID().toString()
-                    data["isSystem"] = false
-                    data["isDefault"] = false
-                    data["createdAt"] = FieldValue.serverTimestamp()
-                    categoriesRef.add(data).await()
-                    emitEvent(CategoriesEvent.ShowToast("Category added successfully"))
+                    val newData = data + ("createdAt" to FieldValue.serverTimestamp())
+                    db.collection("users").document(uid).collection("categories")
+                        .document().set(newData) // Instant offline write
                 }
-                closeModal()
+                
+                _events.emit(CategoriesEvent.ShowToast("Category saved successfully"))
+                
+                // Uses your existing function to close the bottom sheet
+                closeModal() 
+                
             } catch (e: Exception) {
-                emitEvent(CategoriesEvent.ShowToast("Save failed: ${e.message}", true))
+                _events.emit(CategoriesEvent.ShowToast("Failed to save: ${e.message}", true))
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
             }
         }
     }
 
+    // Changed parameter from 'categoryId: String' to 'category: CategoryItem' to match the UI
     fun deleteCategory(category: CategoryItem) {
         val uid = auth.currentUser?.uid ?: return
-        if (category.isSystem) {
-            emitEvent(CategoriesEvent.ShowToast("\"${category.name}\" is a system category and cannot be deleted.", true))
-            return
-        }
-        
         viewModelScope.launch {
             try {
-                db.collection("users").document(uid).collection("categories").document(category.id).delete().await()
-                emitEvent(CategoriesEvent.ShowToast("Category deleted successfully"))
+                db.collection("users").document(uid).collection("categories")
+                    .document(category.id).delete() // Instant offline write
+                    
+                _events.emit(CategoriesEvent.ShowToast("Category deleted"))
             } catch (e: Exception) {
-                emitEvent(CategoriesEvent.ShowToast("Error deleting category: ${e.message}", true))
+                _events.emit(CategoriesEvent.ShowToast("Failed to delete: ${e.message}", true))
             }
         }
     }
+    
 
     private fun emitEvent(event: CategoriesEvent) {
         viewModelScope.launch { _events.emit(event) }

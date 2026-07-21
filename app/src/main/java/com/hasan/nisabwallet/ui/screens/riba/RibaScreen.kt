@@ -183,7 +183,7 @@ fun RibaScreen(
             accounts = state.accounts,
             isSaving = state.isSaving,
             fmt = fmt,
-            onUpdateForm = { viewModel.updateSadaqahForm { it } },
+            onUpdateForm = { newForm -> viewModel.updateSadaqahForm { newForm } },
             onDismiss = { viewModel.closeSadaqahModal() },
             onSave = { viewModel.recordSadaqah() }
         )
@@ -351,7 +351,7 @@ private fun SadaqahModal(
                     }
                 }
                 "selectAccount" -> {
-                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()) {
+                    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()) {
                         Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { currentView = "form" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                             Text("Select Account", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))

@@ -10,6 +10,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,6 +53,7 @@ import kotlinx.coroutines.launch
 // Project Resource Import
 import com.hasan.nisabwallet.R
 
+import com.hasan.nisabwallet.core.util.rememberNetworkMonitor
 import com.hasan.nisabwallet.ui.screens.admin.grocery.MonthlyGroceryScreen
 import com.hasan.nisabwallet.ui.screens.admin.ledger.MonthlyLedgerScreen
 import com.hasan.nisabwallet.ui.screens.auth.LoginScreen
@@ -74,6 +76,12 @@ import com.hasan.nisabwallet.ui.screens.cashflow.CashflowScreen
 import com.hasan.nisabwallet.ui.screens.riba.RibaScreen
 import com.hasan.nisabwallet.ui.screens.zakat.ZakatScreen
 
+// Newly Added Screens
+import com.hasan.nisabwallet.ui.screens.subscription.SubscriptionScreen
+import com.hasan.nisabwallet.ui.screens.tax.TaxPreparationScreen
+import com.hasan.nisabwallet.ui.screens.tax.setup.TaxSetupScreen
+import com.hasan.nisabwallet.ui.screens.tax.detail.TaxDetailScreen
+
 object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
@@ -92,6 +100,8 @@ object Routes {
     const val CASHFLOW = "dashboard/cashflow"
     const val RIBA = "dashboard/riba"
     const val ZAKAT = "dashboard/zakat"
+    const val TAX = "dashboard/tax"
+    const val TAX_SETUP = "dashboard/tax/setup"
     const val SUBSCRIPTION = "dashboard/subscription"
 
     const val INVESTMENTS = "dashboard/investments"
@@ -106,10 +116,13 @@ object Routes {
     const val LENDING_DETAIL = "dashboard/lendings/{lendingId}"
     fun createLendingDetailRoute(id: String) = "dashboard/lendings/$id"
 
+    const val TAX_DETAIL = "dashboard/tax/{id}"
+    fun createTaxDetailRoute(id: String) = "dashboard/tax/$id"
+
     val TOP_LEVEL_ROUTES = listOf(
         DASHBOARD, TRANSACTIONS, ACCOUNTS, CATEGORIES, INVESTMENTS,
         LOANS, LENDINGS, JEWELLERY, SETTINGS, MONTHLY_LEDGER, MONTHLY_GROCERY,
-        ANALYTICS, CASHFLOW, RIBA, ZAKAT
+        ANALYTICS, CASHFLOW, RIBA, ZAKAT, TAX
     )
 }
 
@@ -132,14 +145,17 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
     NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
     NavTabItem(Routes.LENDINGS, "Money Lent", Icons.Default.Money),
+    NavTabItem(Routes.TAX, "Tax Preparation", Icons.Default.Description),
     NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite),
-    NavTabItem(Routes.RIBA, "Riba Tracker", Icons.Default.Warning)
+    NavTabItem(Routes.RIBA, "Riba Tracker", Icons.Default.Warning),
+    NavTabItem(Routes.SETTINGS, "Profile & Settings", Icons.Default.Settings)
 )
 
 @Composable
 fun NisabWalletRootNav(
     navController: NavHostController = rememberNavController(),
 ) {
+    val context = LocalContext.current
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isTopLevel = currentRoute in Routes.TOP_LEVEL_ROUTES
@@ -147,6 +163,9 @@ fun NisabWalletRootNav(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var isFabExpanded by remember { mutableStateOf(false) }
+
+    // Real-time network sync state
+    val isOnline by rememberNetworkMonitor(context).collectAsState()
 
     // ─── Dynamic Drawer Colors ───
     val isDarkTheme = isSystemInDarkTheme()
@@ -160,8 +179,6 @@ fun NisabWalletRootNav(
     val unselectedText = if (isDarkTheme) Color(0xFFD1D5DB) else Color(0xFF4B5563)
     val unselectedIcon = if (isDarkTheme) Color(0xFF9CA3AF) else Color(0xFF6B7280)
 
-    // ─── Bind to Settings for Default FAB Option ───
-    val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("nisab_prefs", Context.MODE_PRIVATE) }
     var defaultFabRoute by remember { mutableStateOf(sharedPrefs.getString("default_fab", Routes.TRANSACTIONS) ?: Routes.TRANSACTIONS) }
 
@@ -173,10 +190,8 @@ fun NisabWalletRootNav(
         onDispose { sharedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    // ─── Dynamic Contextual FAB Menu ───
     val dynamicQuickActions = remember(currentRoute, defaultFabRoute) {
         val actions = mutableListOf<NavTabItem>()
-
         val contextualAction = when (currentRoute) {
             Routes.TRANSACTIONS -> NavTabItem("action_add", "Add Transaction", Icons.Default.AddCard)
             Routes.JEWELLERY -> NavTabItem("action_add", "Add Jewellery", Icons.Default.Diamond)
@@ -270,22 +285,25 @@ fun NisabWalletRootNav(
                     // ─── Fixed Footer Section ───
                     HorizontalDivider(color = dividerColor)
                     Column(modifier = Modifier.padding(12.dp)) {
+
+                        val user = FirebaseAuth.getInstance().currentUser
+                        val profileName = user?.displayName?.ifBlank { user.email } ?: "Nisab Wallet User"
+
+                        // Profile Display
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    scope.launch { drawerState.close() }
-                                    navController.navigate(Routes.SETTINGS) { launchSingleTop = true }
-                                }
-                                .padding(12.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.AccountCircle, null, tint = unselectedIcon, modifier = Modifier.size(22.dp))
+                            Box(modifier = Modifier.size(24.dp).background(Color(0xFFDBEAFE), CircleShape), contentAlignment = Alignment.Center) {
+                                Text(profileName.firstOrNull()?.uppercase() ?: "U", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                            }
                             Spacer(Modifier.width(12.dp))
-                            Text("Profile & Settings", color = drawerTextColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(profileName, color = drawerTextColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
 
+                        // Logout Action
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -332,6 +350,34 @@ fun NisabWalletRootNav(
                                 .border(1.dp, Color(0xFFE5E7EB), CircleShape)
                         ) {
                             Icon(Icons.Default.Menu, contentDescription = "Open Navigation", tint = Color(0xFF111827))
+                        }
+                    }
+
+                    // ─── Global Online/Offline Indicator ───
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 22.dp)
+                    ) {
+                        Surface(
+                            color = if (isOnline) Color(0xFFECFDF5) else Color(0xFFF3F4F6),
+                            shape = RoundedCornerShape(50),
+                            border = BorderStroke(1.dp, if (isOnline) Color(0xFFD1FAE5) else Color(0xFFE5E7EB)),
+                            shadowElevation = 1.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.size(6.dp).background(if (isOnline) Color(0xFF10B981) else Color(0xFF9CA3AF), CircleShape))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = if (isOnline) "Synced" else "Offline Mode",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isOnline) Color(0xFF065F46) else Color(0xFF4B5563)
+                                )
+                            }
                         }
                     }
                 }
@@ -461,7 +507,6 @@ fun NisabWalletNavGraph(
         }
 
         composable(Routes.DASHBOARD) {
-            // Explicitly map all Dashboard routing functions to ensure clean, accurate navigation
             DashboardScreen(
                 onNavigateToTransactions = { navController.navigate(Routes.TRANSACTIONS) },
                 onNavigateToAccounts     = { navController.navigate(Routes.ACCOUNTS) },
@@ -584,6 +629,42 @@ fun NisabWalletNavGraph(
             )
         }
 
+        composable(Routes.TAX) {
+            TaxPreparationScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSetup = { navController.navigate(Routes.TAX_SETUP) },
+                onNavigateToTaxYear = { id -> navController.navigate(Routes.createTaxDetailRoute(id)) }
+            )
+        }
+
+        composable(Routes.TAX_SETUP) {
+            TaxSetupScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onSetupComplete = { navController.popBackStack(Routes.TAX, inclusive = false) }
+            )
+        }
+
+        composable(
+            route = Routes.TAX_DETAIL,
+            arguments = listOf(navArgument("id") { type = NavType.StringType })
+        ) {
+            TaxDetailScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSetup = { navController.navigate(Routes.TAX_SETUP) }
+            )
+        }
+
+        composable(Routes.SUBSCRIPTION) {
+            SubscriptionScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToPending = {
+                    navController.navigate(Routes.DASHBOARD) {
+                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Routes.MONTHLY_GROCERY) { backStackEntry ->
             val savedStateHandle = backStackEntry.savedStateHandle
             val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
@@ -634,7 +715,6 @@ fun NisabWalletNavGraph(
             )
         }
 
-        // Accurately mapped Riba Tracker
         composable(Routes.RIBA) {
             RibaScreen(
                 onNavigateBack = { navController.popBackStack() }
@@ -643,8 +723,7 @@ fun NisabWalletNavGraph(
 
         val placeholders = listOf(
             Routes.TRANSFER to "Transfer",
-            Routes.GOALS to "Goals",
-            Routes.SUBSCRIPTION to "Subscription",
+            Routes.GOALS to "Goals"
         )
 
         placeholders.forEach { (route, title) ->

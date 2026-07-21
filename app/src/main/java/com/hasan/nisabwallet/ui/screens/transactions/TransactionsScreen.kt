@@ -693,8 +693,19 @@ private fun AddEditTransactionSheet(
 
     val isIncome    = form.type == "Income"
     val isTransfer  = form.type == "Transfer"
+    val isDeducting = form.type == "Expense" || isTransfer
     val accentColor = if (isTransfer) Color(0xFF2563EB) else if (isIncome) Color(0xFF16A34A) else Color(0xFFDC2626)
     val filteredCats = categories.filter { it.type == form.type }
+
+    // ── Overspend Protection Variables ──
+    var confirmOverspend by remember { mutableStateOf(false) }
+    val selectedAccount = accounts.find { it.id == form.accountId }
+    val totalDeduction = (form.amount.toDoubleOrNull() ?: 0.0) + (form.chargeAmount.toDoubleOrNull() ?: 0.0)
+    val exceedsBalance = isDeducting && selectedAccount != null && totalDeduction > selectedAccount.balance
+
+    LaunchedEffect(exceedsBalance) {
+        if (!exceedsBalance) confirmOverspend = false
+    }
 
     // State machine for Drill-Down Navigation
     var currentView by remember { mutableStateOf("form") }
@@ -755,17 +766,64 @@ private fun AddEditTransactionSheet(
                             }
                         }
 
-                        // Amount Field
-                        OutlinedTextField(
-                            value         = form.amount,
-                            onValueChange = { form = form.copy(amount = it) },
-                            label         = { Text("Amount (৳)") },
-                            modifier      = Modifier.fillMaxWidth(),
-                            shape         = RoundedCornerShape(12.dp),
-                            singleLine    = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            textStyle     = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        )
+                        // Amount Field & Balance Header
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (selectedAccount != null && isDeducting) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(
+                                        text = "Available Account Balance",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "৳${CurrencyFormatter.formatBDT(selectedAccount.balance)}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (exceedsBalance) Color(0xFFDC2626) else Color(0xFF16A34A)
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value         = form.amount,
+                                onValueChange = { form = form.copy(amount = it) },
+                                label         = { Text("Amount (৳)") },
+                                modifier      = Modifier.fillMaxWidth(),
+                                shape         = RoundedCornerShape(12.dp),
+                                singleLine    = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                textStyle     = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            )
+                        }
+
+                        // Overspend Warning Box
+                        androidx.compose.animation.AnimatedVisibility(visible = exceedsBalance) {
+                            Surface(
+                                color = Color(0xFFFEF2F2),
+                                border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .clickable { confirmOverspend = !confirmOverspend }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Insufficient Balance", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
+                                        Text("This transaction exceeds your available funds.", fontSize = 11.sp, color = Color(0xFFB91C1C))
+                                    }
+                                    Checkbox(
+                                        checked = confirmOverspend,
+                                        onCheckedChange = { confirmOverspend = it },
+                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFFDC2626), uncheckedColor = Color(0xFFF87171))
+                                    )
+                                }
+                            }
+                        }
 
                         // Drill-Down Selection Fields
                         Column(
@@ -828,7 +886,7 @@ private fun AddEditTransactionSheet(
 
                         Button(
                             onClick   = { onSave(form) },
-                            enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && (if (isTransfer) form.toAccountId.isNotBlank() else form.categoryId.isNotBlank()),
+                            enabled   = !isSaving && form.amount.isNotBlank() && form.accountId.isNotBlank() && (if (isTransfer) form.toAccountId.isNotBlank() else form.categoryId.isNotBlank()) && (!exceedsBalance || confirmOverspend),
                             modifier  = Modifier.fillMaxWidth().height(52.dp),
                             shape     = RoundedCornerShape(12.dp),
                             colors    = ButtonDefaults.buttonColors(containerColor = accentColor),

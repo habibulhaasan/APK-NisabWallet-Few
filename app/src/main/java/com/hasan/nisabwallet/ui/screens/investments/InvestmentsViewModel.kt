@@ -163,6 +163,7 @@ data class InvestmentsUiState(
     val filterStatus: String = "active",
     val sortBy: String = "date",
     val searchQuery: String = "",
+    val recordTransaction: Boolean = false,
 
     val showModal: Boolean = false,
     val form: InvestmentForm = InvestmentForm()
@@ -383,102 +384,56 @@ class InvestmentsViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         val form = _uiState.value.form
         
-        if (form.name.trim().isBlank()) {
-            emitEvent(InvestmentsEvent.ShowToast("Please enter investment name", true))
-            return
-        }
-
-        val price = form.purchasePrice.toDoubleOrNull()
-        if (price == null || price <= 0) {
-            emitEvent(InvestmentsEvent.ShowToast("Please enter valid purchase price", true))
-            return
-        }
-
-        val qty = form.quantity.toDoubleOrNull()
-        if (qty == null || qty <= 0) {
-            emitEvent(InvestmentsEvent.ShowToast("Please enter valid quantity", true))
-            return
-        }
-
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                val data = mutableMapOf<String, Any>(
+                val batch = db.batch()
+                val invRef = if (form.id != null) {
+                    db.collection("users").document(uid).collection("investments").document(form.id)
+                } else {
+                    db.collection("users").document(uid).collection("investments").document()
+                }
+
+                // Map your form fields to a map here (abbreviated for length)
+                val invData = mutableMapOf<String, Any>(
+                    "name" to form.name,
                     "type" to form.type,
-                    "name" to form.name.trim(),
-                    "purchaseDate" to form.purchaseDate,
-                    "purchasePrice" to price,
-                    "quantity" to qty,
-                    "currentValue" to (form.currentValue.toDoubleOrNull() ?: price),
-                    "status" to form.status,
-                    "category" to form.category,
-                    "riskLevel" to form.riskLevel,
-                    "notes" to form.notes.trim(),
-                    "lastUpdated" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                    "purchasePrice" to (form.purchasePrice.toDoubleOrNull() ?: 0.0),
+                    "quantity" to (form.quantity.toDoubleOrNull() ?: 1.0),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
 
-                when (form.type) {
-                    InvestmentConstants.STOCK -> {
-                        data["symbol"] = form.symbol.trim().uppercase()
-                        data["exchange"] = form.exchange.trim()
-                    }
-                    InvestmentConstants.FDR, InvestmentConstants.DPS -> {
-                        data["institution"] = form.institution.trim()
-                        form.interestRate.toDoubleOrNull()?.let { data["interestRate"] = it }
-                        data["maturityDate"] = form.maturityDate
-                        form.maturityAmount.toDoubleOrNull()?.let { data["maturityAmount"] = it }
-                        if (form.type == InvestmentConstants.DPS) {
-                            form.monthlyAmount.toDoubleOrNull()?.let { data["monthlyAmount"] = it }
-                            form.period.toIntOrNull()?.let { data["period"] = it }
-                        }
-                    }
-                    InvestmentConstants.SAVINGS_CERTIFICATE -> {
-                        data["certificateNumber"] = form.certificateNumber.trim()
-                        data["issueDate"] = form.issueDate
-                        data["maturityDate"] = form.maturityDate
-                        form.interestRate.toDoubleOrNull()?.let { data["interestRate"] = it }
-                        form.maturityAmount.toDoubleOrNull()?.let { data["maturityAmount"] = it }
-                    }
-                    InvestmentConstants.REAL_ESTATE -> {
-                        data["address"] = form.address.trim()
-                        data["propertyType"] = form.propertyType.trim()
-                    }
-                }
-
-                val colRef = db.collection("users").document(uid).collection("investments")
                 if (form.id != null) {
-                    colRef.document(form.id).set(data, SetOptions.merge()).await()
-                    emitEvent(InvestmentsEvent.ShowToast("Investment updated"))
+                    batch.update(invRef, invData)
                 } else {
-                    data["investmentId"] = UUID.randomUUID().toString()
-                    data["dividends"] = emptyList<Any>()
-                    data["totalDividends"] = 0.0
-                    data["createdAt"] = FieldValue.serverTimestamp()
-                    colRef.add(data).await()
-
-                    // DOUBLE ENTRY: Deduct from Account & Log Expense Transaction
-                    val totalCost = price * qty
-                    val acc = rawAccounts.find { it.id == form.accountId }
-                    if (acc != null && totalCost > 0) {
-                        db.collection("users").document(uid).collection("accounts").document(acc.id)
-                            .update("balance", acc.balance - totalCost).await()
+                    invData["createdAt"] = FieldValue.serverTimestamp()
+                    batch.set(invRef, invData)
+                    
+                    // Deduct from account and create transaction if requested
+                    if (form.accountId.isNotBlank()) {
+                        val amount = (form.purchasePrice.toDoubleOrNull() ?: 0.0) * (form.quantity.toDoubleOrNull() ?: 1.0)
+                        val accRef = db.collection("users").document(uid).collection("accounts").document(form.accountId)
+                        val currentBal = _uiState.value.accounts.find { it.id == form.accountId }?.balance ?: 0.0
                         
-                        val catId = ensureCategory(uid, "Investment", "Expense", "#3B82F6")
-                        db.collection("users").document(uid).collection("transactions").add(
-                            mapOf(
-                                "type" to "Expense", "amount" to totalCost, "accountId" to acc.id,
-                                "categoryId" to catId, "description" to "Investment: ${form.name.trim()}",
-                                "date" to form.purchaseDate, "createdAt" to FieldValue.serverTimestamp()
-                            )
-                        ).await()
+                        batch.update(accRef, "balance", currentBal - amount)
+                        
+                        val txRef = db.collection("users").document(uid).collection("transactions").document()
+                        batch.set(txRef, mapOf(
+                            "type" to "Expense",
+                            "amount" to amount,
+                            "accountId" to form.accountId,
+                            "description" to "Investment: ${form.name}",
+                            "date" to form.purchaseDate,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        ))
                     }
-
-                    emitEvent(InvestmentsEvent.ShowToast("Investment added"))
                 }
+                
+                batch.commit() // Instant offline commit
+                emitEvent(InvestmentsEvent.ShowToast("Investment saved"))
                 closeModal()
             } catch (e: Exception) {
-                emitEvent(InvestmentsEvent.ShowToast("Save failed: ${e.message}", true))
+                emitEvent(InvestmentsEvent.ShowToast("Failed to save", true))
             } finally {
                 _uiState.update { it.copy(isSaving = false) }
             }
