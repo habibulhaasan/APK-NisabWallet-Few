@@ -85,7 +85,6 @@ fun ZakatScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFFF9FAFB),
         topBar = {
-            // ─── Frozen Top Bar ───
             Surface(color = Color(0xFFF9FAFB), modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
@@ -93,7 +92,7 @@ fun ZakatScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(modifier = Modifier.width(48.dp)) // Clears hamburger
+                        Spacer(modifier = Modifier.width(48.dp))
                         Column {
                             Text("Zakat Tracking", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             Text("Monitor your Zakat obligations", fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -116,11 +115,10 @@ fun ZakatScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Top Actions
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     when {
-                        state.zakatStatus == "Due" || state.activeCycle?.status == "due" -> {
+                        state.zakatStatus == "Zakat Due" || state.activeCycle?.status == "due" -> {
                             Button(onClick = { viewModel.openPaymentModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)), shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(48.dp)) {
                                 Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Pay Zakat", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
@@ -134,7 +132,6 @@ fun ZakatScreen(
                 }
             }
 
-            // Tabs
             item {
                 Row(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F4F6)).padding(4.dp)) {
                     listOf("overview" to "Overview", "history" to "Zakat History").forEach { (id, label) ->
@@ -147,7 +144,6 @@ fun ZakatScreen(
             }
 
             if (state.activeTab == "overview") {
-                // ─── Main Status Card (Gradient) ───
                 item {
                     Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(listOf(Color(0xFFECFDF5), Color(0xFFE0F2FE)))).border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(16.dp)).padding(24.dp)) {
                         Column {
@@ -157,7 +153,7 @@ fun ZakatScreen(
                                     Spacer(Modifier.width(12.dp))
                                     Column { Text("Current Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)); Text("Real-time monitoring", fontSize = 11.sp, color = Color(0xFF4B5563)) }
                                 }
-                                val bg = when(state.zakatStatus) { "Due" -> Color(0xFFDC2626); "Monitoring" -> Color(0xFF2563EB); else -> Color(0xFF111827) }
+                                val bg = when(state.zakatStatus) { "Zakat Due" -> Color(0xFFDC2626); "Monitoring" -> Color(0xFF2563EB); else -> Color(0xFF111827) }
                                 Surface(shape = RoundedCornerShape(50), color = bg) { Text(state.zakatStatus, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                             }
 
@@ -168,7 +164,7 @@ fun ZakatScreen(
                             }
                             Spacer(Modifier.height(12.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (state.zakatStatus == "Due" || state.zakatStatus == "Monitoring") {
+                                if (state.zakatStatus == "Zakat Due" || state.zakatStatus == "Monitoring") {
                                     WealthStatCard("Zakat Due (2.5%)", fmt(state.zakatAmountDue), Icons.Default.Favorite, Color(0xFFDC2626), Modifier.weight(1f), true)
                                 }
                                 if (state.activeCycle != null) {
@@ -191,7 +187,6 @@ fun ZakatScreen(
                     }
                 }
 
-                // ─── Actions Block ───
                 if (state.settings.nisabThreshold == 0.0) {
                     item {
                         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD1FAE5))) {
@@ -210,7 +205,6 @@ fun ZakatScreen(
                     }
                 }
 
-                // ─── Wealth Breakdown Accordion ───
                 item {
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column {
@@ -220,7 +214,6 @@ fun ZakatScreen(
                             }
                             HorizontalDivider(color = Color(0xFFF3F4F6))
 
-                            // Accounts
                             var openAcc by remember { mutableStateOf(false) }
                             Column {
                                 Row(Modifier.fillMaxWidth().clickable { openAcc = !openAcc }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -244,7 +237,6 @@ fun ZakatScreen(
                             }
                             HorizontalDivider(color = Color(0xFFF3F4F6))
 
-                            // Lendings
                             var openLend by remember { mutableStateOf(false) }
                             Column {
                                 Row(Modifier.fillMaxWidth().clickable { openLend = !openLend }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -275,12 +267,10 @@ fun ZakatScreen(
                             }
                             HorizontalDivider(color = Color(0xFFF3F4F6))
 
-                            // Simple rows for Investments, Goals, Jewellery
                             SimpleBreakdownRow("Investments", fmt(state.breakdown.investmentsTotal), Icons.AutoMirrored.Filled.TrendingUp, Color(0xFFDB2777))
                             SimpleBreakdownRow("Savings Goals", fmt(state.breakdown.goalsTotal), Icons.Default.TrackChanges, Color(0xFFEA580C))
                             SimpleBreakdownRow("Jewellery (−15%)", fmt(state.breakdown.jewelleryTotal), Icons.Default.Diamond, Color(0xFFD97706))
 
-                            // Deductions
                             if (state.breakdown.ribaTotal > 0) {
                                 Row(Modifier.fillMaxWidth().background(Color(0xFFFFFBEB)).padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Warning, null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(12.dp)); Text("Riba (Excluded)", fontSize = 13.sp, color = Color(0xFF92400E)) }
@@ -296,7 +286,6 @@ fun ZakatScreen(
                                 }
                             }
 
-                            // Total Bar
                             Row(Modifier.fillMaxWidth().background(Color(0xFFECFDF5)).padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Net Zakatable Wealth", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
                                 Text(fmt(state.breakdown.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF047857))
@@ -307,7 +296,6 @@ fun ZakatScreen(
 
                 item { Spacer(Modifier.height(40.dp)) }
             } else {
-                // History Tab Content
                 if (state.cycleHistory.isEmpty()) {
                     item {
                         Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -343,7 +331,6 @@ fun ZakatScreen(
             }
         }
 
-        // ─── Modals ───
         if (state.showSettingsModal) {
             NisabSettingsModal(
                 form = state.settingsForm, isSaving = state.isSaving, fetchState = state.bajusFetchState,
@@ -376,8 +363,6 @@ fun ZakatScreen(
         }
     }
 }
-
-// ─── Component Helpers ───
 
 @Composable
 private fun WealthStatCard(label: String, value: String, icon: ImageVector, iconColor: Color, modifier: Modifier, highlight: Boolean = false) {
@@ -413,14 +398,6 @@ private fun SimpleBreakdownRow(label: String, value: String, icon: ImageVector, 
     HorizontalDivider(color = Color(0xFFF3F4F6))
 }
 
-@Composable
-private fun RateRow(label: String, price: Double) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 12.sp, color = Color(0xFF4B5563))
-        Text("৳${CurrencyFormatter.formatBDT(price)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NisabSettingsModal(
@@ -432,7 +409,6 @@ private fun NisabSettingsModal(
     var inputTab by remember { mutableStateOf(if (form.priceSource == "auto") "auto" else "manual") }
     var showAllKarats by remember { mutableStateOf(false) }
 
-    // Manual input states
     var manualSilverGram by remember(form.silverPricePerGram) { mutableStateOf(if (form.silverPricePerGram > 0) form.silverPricePerGram.toString() else "") }
     var manualSilverVori by remember(form.silverPricePerVori) { mutableStateOf(if (form.silverPricePerVori > 0) form.silverPricePerVori.toString() else "") }
     var manualGoldGram by remember(form.goldPricePerGram) { mutableStateOf(if (form.goldPricePerGram > 0) form.goldPricePerGram.toString() else "") }
@@ -441,7 +417,6 @@ private fun NisabSettingsModal(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), containerColor = Color.White) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding().navigationBarsPadding()) {
 
-            // Header
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(36.dp).background(Color(0xFFD1FAE5), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
@@ -456,7 +431,6 @@ private fun NisabSettingsModal(
                 IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Color(0xFF6B7280)) }
             }
 
-            // Tabs
             Surface(color = Color(0xFFF3F4F6), shape = RoundedCornerShape(10.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
                 Row(Modifier.padding(4.dp)) {
                     Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (inputTab == "auto") Color.White else Color.Transparent).clickable { inputTab = "auto"; onUpdate(form.copy(priceSource = "auto")) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
@@ -469,11 +443,9 @@ private fun NisabSettingsModal(
             }
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp), color = Color(0xFFF3F4F6))
 
-            // Body
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
                 if (inputTab == "auto") {
-                    // BAJUS Source Badge
                     Row(Modifier.fillMaxWidth().background(Color(0xFFECFDF5), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFD1FAE5), RoundedCornerShape(12.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(8.dp).background(Color(0xFF10B981), CircleShape))
@@ -498,48 +470,51 @@ private fun NisabSettingsModal(
                             }
                         }
 
-                        // Price Cards
+                        // Price Cards (Swapped Per Vori to be above Per Gram inside the card)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Gold Card
                             Column(Modifier.weight(1f).background(Color(0xFFFFFBEB), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(12.dp)).padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                                     Box(modifier = Modifier.size(8.dp).background(Color(0xFFFBBF24), CircleShape)); Spacer(Modifier.width(6.dp))
                                     Text("Gold (22K)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
                                 }
-                                Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 val deductedGold = if(form.applyDeduction) form.goldRates.k22 * 0.85 else form.goldRates.k22
+                                
+                                Text("Per vori", fontSize = 11.sp, color = Color(0xFF9CA3AF))
+                                Text("৳${CurrencyFormatter.formatBDT(deductedGold * 11.664)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                
+                                Spacer(Modifier.height(6.dp))
+                                
+                                Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(deductedGold)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                                 if (form.applyDeduction) {
                                     Text("৳${CurrencyFormatter.formatBDT(form.goldRates.k22)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), textDecoration = TextDecoration.LineThrough)
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                Text("Per vori", fontSize = 11.sp, color = Color(0xFF9CA3AF))
-                                Text("৳${CurrencyFormatter.formatBDT(deductedGold * 11.664)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             }
 
-                            // Silver Card (No deduction ever)
                             Column(Modifier.weight(1f).background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(12.dp)).padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                                     Box(modifier = Modifier.size(8.dp).background(Color(0xFF94A3B8), CircleShape)); Spacer(Modifier.width(6.dp))
                                     Text("Silver (Trad.)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
                                 }
-                                Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
-                                Text("৳${CurrencyFormatter.formatBDT(form.silverRates.traditional)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                Spacer(Modifier.height(6.dp))
+                                
                                 Text("Per vori", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(form.silverRates.traditional * 11.664)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                
+                                Spacer(Modifier.height(6.dp))
+                                
+                                Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
+                                Text("৳${CurrencyFormatter.formatBDT(form.silverRates.traditional)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                
                                 Text("★ Nisab basis", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF059669), modifier = Modifier.padding(top = 4.dp))
                             }
                         }
 
-                        // Gold Deduction Toggle
                         GoldDeductionToggle(
                             enabled = form.applyDeduction,
                             rawGoldGram = form.goldRates.k22,
                             onToggle = { onUpdate(form.copy(applyDeduction = it)) }
                         )
 
-                        // All Karats Expandable
                         Surface(modifier = Modifier.fillMaxWidth().clickable { showAllKarats = !showAllKarats }, color = Color(0xFFF9FAFB), shape = RoundedCornerShape(12.dp)) {
                             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Show all karat prices", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF4B5563))
@@ -554,13 +529,11 @@ private fun NisabSettingsModal(
 
                         NisabResultCard(form.nisabThreshold)
 
-                        // Action Buttons
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = onSave, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))) {
                                 Text("Save — Nisab ৳${CurrencyFormatter.formatBDT(form.nisabThreshold)}", fontWeight = FontWeight.Bold)
                             }
                             OutlinedButton(onClick = {
-                                // Apply fetched to manual
                                 manualSilverGram = form.silverRates.traditional.toString()
                                 manualSilverVori = (form.silverRates.traditional * 11.664).toString()
                                 manualGoldGram = (if(form.applyDeduction) form.goldRates.k22 * 0.85 else form.goldRates.k22).toString()
@@ -579,53 +552,50 @@ private fun NisabSettingsModal(
                         }
                     }
                 } else {
-                    // MANUAL TAB
                     Row(Modifier.fillMaxWidth().background(Color(0xFFEFF6FF), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFDBEAFE), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
                         Icon(Icons.Default.Info, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp).padding(top = 2.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Enter today's prices from the official BAJUS website. Type in either gram or vori — the other fills automatically.", fontSize = 11.sp, color = Color(0xFF1E3A8A))
                     }
 
-                    // Unit Toggle
                     Column {
                         Text("DISPLAY UNIT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6B7280), modifier = Modifier.padding(bottom = 6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onUpdate(form.copy(priceUnit = "gram")) }, modifier = Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = if(form.priceUnit == "gram") Color(0xFF111827) else Color.White, contentColor = if(form.priceUnit == "gram") Color.White else Color(0xFF4B5563)), border = BorderStroke(1.dp, if(form.priceUnit == "gram") Color.Transparent else Color(0xFFE5E7EB))) { Text("Per Gram (g)") }
                             Button(onClick = { onUpdate(form.copy(priceUnit = "vori")) }, modifier = Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = if(form.priceUnit == "vori") Color(0xFF111827) else Color.White, contentColor = if(form.priceUnit == "vori") Color.White else Color(0xFF4B5563)), border = BorderStroke(1.dp, if(form.priceUnit == "vori") Color.Transparent else Color(0xFFE5E7EB))) { Text("Per Vori") }
+                            Button(onClick = { onUpdate(form.copy(priceUnit = "gram")) }, modifier = Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = if(form.priceUnit == "gram") Color(0xFF111827) else Color.White, contentColor = if(form.priceUnit == "gram") Color.White else Color(0xFF4B5563)), border = BorderStroke(1.dp, if(form.priceUnit == "gram") Color.Transparent else Color(0xFFE5E7EB))) { Text("Per Gram (g)") }
                         }
                     }
 
-                    // Silver
+                    // Vori first visually for manual entry
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) { Box(modifier = Modifier.size(10.dp).background(Color(0xFF94A3B8), CircleShape)); Spacer(Modifier.width(8.dp)); Text("Silver Price (৳)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)) }
                         Text("Enter Traditional (Sanaton) silver price for accurate Nisab", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(start = 18.dp, bottom = 8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = manualSilverGram, onValueChange = {
-                                manualSilverGram = it; manualSilverVori = (it.toDoubleOrNull()?.times(11.664))?.toString() ?: ""
-                                onUpdate(form.copy(silverPricePerGram = it.toDoubleOrNull() ?: 0.0, silverPricePerVori = manualSilverVori.toDoubleOrNull() ?: 0.0))
-                            }, label = { Text("Per Gram") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             OutlinedTextField(value = manualSilverVori, onValueChange = {
                                 manualSilverVori = it; manualSilverGram = (it.toDoubleOrNull()?.div(11.664))?.toString() ?: ""
                                 onUpdate(form.copy(silverPricePerVori = it.toDoubleOrNull() ?: 0.0, silverPricePerGram = manualSilverGram.toDoubleOrNull() ?: 0.0))
                             }, label = { Text("Per Vori") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                            OutlinedTextField(value = manualSilverGram, onValueChange = {
+                                manualSilverGram = it; manualSilverVori = (it.toDoubleOrNull()?.times(11.664))?.toString() ?: ""
+                                onUpdate(form.copy(silverPricePerGram = it.toDoubleOrNull() ?: 0.0, silverPricePerVori = manualSilverVori.toDoubleOrNull() ?: 0.0))
+                            }, label = { Text("Per Gram") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                         }
                         if ((manualSilverGram.toDoubleOrNull() ?: 0.0) > 0) {
                             Text("Nisab = ৳${CurrencyFormatter.formatBDT((manualSilverGram.toDoubleOrNull() ?: 0.0) * 612.36)} (612.36 g × price/gram)", fontSize = 11.sp, color = Color(0xFF059669), fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
                         }
                     }
 
-                    // Gold
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) { Box(modifier = Modifier.size(10.dp).background(Color(0xFFFBBF24), CircleShape)); Spacer(Modifier.width(8.dp)); Text("Gold Price (৳)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = manualGoldGram, onValueChange = {
-                                manualGoldGram = it; manualGoldVori = (it.toDoubleOrNull()?.times(11.664))?.toString() ?: ""
-                                onUpdate(form.copy(goldPricePerGram = it.toDoubleOrNull() ?: 0.0, goldPricePerVori = manualGoldVori.toDoubleOrNull() ?: 0.0))
-                            }, label = { Text("Per Gram") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             OutlinedTextField(value = manualGoldVori, onValueChange = {
                                 manualGoldVori = it; manualGoldGram = (it.toDoubleOrNull()?.div(11.664))?.toString() ?: ""
                                 onUpdate(form.copy(goldPricePerVori = it.toDoubleOrNull() ?: 0.0, goldPricePerGram = manualGoldGram.toDoubleOrNull() ?: 0.0))
                             }, label = { Text("Per Vori") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                            OutlinedTextField(value = manualGoldGram, onValueChange = {
+                                manualGoldGram = it; manualGoldVori = (it.toDoubleOrNull()?.times(11.664))?.toString() ?: ""
+                                onUpdate(form.copy(goldPricePerGram = it.toDoubleOrNull() ?: 0.0, goldPricePerVori = manualGoldVori.toDoubleOrNull() ?: 0.0))
+                            }, label = { Text("Per Gram") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                         }
                     }
 
@@ -712,6 +682,7 @@ private fun NisabResultCard(nisab: Double) {
     }
 }
 
+// Visual Swapped layout (Per Vori first, Per Gram second)
 @Composable
 private fun KaratTable(label: String, theme: String, rates: KaratRates, applyDeduction: Boolean, nisabRow: String = "") {
     val isAmber = theme == "amber"
@@ -731,21 +702,21 @@ private fun KaratTable(label: String, theme: String, rates: KaratRates, applyDed
             if (applyDeduction) Text("−15% applied", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = head.copy(alpha = 0.7f))
         }
 
-        // Header Row
+        // Header Row Swapped
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text("Karat", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, modifier = Modifier.weight(1.5f))
-            Text("Per Gram", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
             Text("Per Vori", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+            Text("Per Gram", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
         }
 
         val rows = listOf("22K" to rates.k22, "21K" to rates.k21, "18K" to rates.k18, nisabRow.ifBlank { "Traditional" } to rates.traditional)
 
-        rows.forEach { (k, p) ->
+        rows.forEach { (k, p) -> // p is the per gram price
             val isNisab = k == nisabRow
             Row(Modifier.fillMaxWidth().background(if(isNisab) Color(0xFFECFDF5) else Color.Transparent).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(k, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if(isNisab) Color(0xFF047857) else Color(0xFF374151), modifier = Modifier.weight(1.5f))
-                Text(CurrencyFormatter.formatBDT(adj(p)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(isNisab) Color(0xFF065F46) else Color(0xFF111827), textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                 Text(CurrencyFormatter.formatBDT(adj(p * 11.664)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(isNisab) Color(0xFF065F46) else Color(0xFF111827), textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                Text(CurrencyFormatter.formatBDT(adj(p)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(isNisab) Color(0xFF065F46) else Color(0xFF111827), textAlign = TextAlign.End, modifier = Modifier.weight(1f))
             }
         }
     }
