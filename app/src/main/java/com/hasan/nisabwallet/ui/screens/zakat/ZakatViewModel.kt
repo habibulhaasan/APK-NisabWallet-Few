@@ -150,7 +150,6 @@ class ZakatViewModel @Inject constructor(
     private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
 
-        // 1. Fetch Accounts
         db.collection("users").document(uid).collection("accounts")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -162,7 +161,6 @@ class ZakatViewModel @Inject constructor(
                 }
             }
 
-        // 2. Fetch Lendings
         db.collection("users").document(uid).collection("lendings").whereEqualTo("status", "active")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -179,7 +177,6 @@ class ZakatViewModel @Inject constructor(
                 }
             }
 
-        // 3. Fetch Nisab Settings
         db.collection("users").document(uid).collection("settings").limit(1)
             .addSnapshotListener { snap, _ ->
                 if (snap != null && !snap.isEmpty) {
@@ -216,7 +213,6 @@ class ZakatViewModel @Inject constructor(
                 }
             }
 
-        // 4. Fetch Zakat Cycles
         db.collection("users").document(uid).collection("zakatCycles")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, _ ->
@@ -320,8 +316,6 @@ class ZakatViewModel @Inject constructor(
         }
     }
 
-    // ─── Actions ───
-
     fun toggleLendingZakat(lendingId: String, count: Boolean) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -371,6 +365,12 @@ class ZakatViewModel @Inject constructor(
     private suspend fun fetchLiveMetalPrices(): Pair<BajusRates, String> = withContext(Dispatchers.IO) {
         val timeStr = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
 
+        // Helper to accurately derive 1 gram price regardless of HTML order
+        fun deriveGram(list: List<Double>, threshold: Double): Double {
+            val max = list.maxOrNull() ?: 0.0
+            return if (max > threshold) max / 11.664 else max
+        }
+
         // 1. Scraping goldr.org (Official BAJUS aggregator)
         try {
             val doc = Jsoup.connect("https://www.goldr.org/")
@@ -414,20 +414,18 @@ class ZakatViewModel @Inject constructor(
             val silver18 = allPricesForLabel("18 Karat Silver")
 
             if (gold22.isNotEmpty() && silver22.isNotEmpty()) {
-                fun g(list: List<Double>, i: Int): Double = list.getOrNull(i) ?: 0.0
-
                 val goldRates = KaratRates(
-                    k22 = g(gold22, 0),
-                    k21 = g(gold21, 0),
-                    k18 = g(gold18, 0),
-                    traditional = g(tradAll, 0)
+                    k22 = deriveGram(gold22, 10000.0),
+                    k21 = deriveGram(gold21, 10000.0),
+                    k18 = deriveGram(gold18, 10000.0),
+                    traditional = deriveGram(tradAll.take(2), 10000.0) // Gold traditional
                 )
 
                 val silverRates = KaratRates(
-                    k22 = g(silver22, 0),
-                    k21 = g(silver21, 0),
-                    k18 = g(silver18, 0),
-                    traditional = if (tradAll.size > 1) tradAll[1] else (g(silver18, 0) * 0.85)
+                    k22 = deriveGram(silver22, 500.0),
+                    k21 = deriveGram(silver21, 500.0),
+                    k18 = deriveGram(silver18, 500.0),
+                    traditional = if (tradAll.size > 2) deriveGram(tradAll.drop(2), 500.0) else deriveGram(silver18, 500.0) * 0.85
                 )
 
                 val bajusRates = BajusRates(gold = goldRates, silver = silverRates, lastFetched = timeStr)

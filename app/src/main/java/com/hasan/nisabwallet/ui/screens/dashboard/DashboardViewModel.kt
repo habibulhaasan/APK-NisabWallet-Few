@@ -117,7 +117,7 @@ class DashboardViewModel @Inject constructor(
         // 3. Transactions & Transfers (Recent & Monthly)
         setupTransactionListeners(uid)
 
-        // 4. Zakat & Wealth Listeners (Nisab, Investments, Jewellery, Lendings, Loans)
+        // 4. Zakat & Wealth Listeners
         setupWealthListeners(uid)
     }
 
@@ -210,7 +210,7 @@ class DashboardViewModel @Inject constructor(
 
         listeners.add(db.collection("users").document(uid).collection("loans").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
             loanTotal = snap?.documents?.sumOf { it.getDouble("remainingBalance") ?: it.getDouble("principalAmount") ?: 0.0 } ?: 0.0
-            _uiState.update { it.copy(totalLoans = loanTotal) } // Publish loan total to UI
+            _uiState.update { it.copy(totalLoans = loanTotal) }
             recalculateZakat()
         })
     }
@@ -231,18 +231,18 @@ class DashboardViewModel @Inject constructor(
             if (activeCycleDate != null) {
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 val start = runCatching { sdf.parse(activeCycleDate!!)?.time }.getOrNull() ?: System.currentTimeMillis()
-                val end = start + (354L * 24 * 60 * 60 * 1000) // Hijri year approx
+                val end = start + (354L * 24 * 60 * 60 * 1000)
                 val today = System.currentTimeMillis()
 
                 if (today >= end || activeCycleStatus == "due") {
-                    status = if (netWealth >= nisab) "Zakat Due" else "Exempt"
+                    status = "Due"
                     amt = if (activeCycleDue > 0) activeCycleDue else netWealth * 0.025
                 } else {
                     status = "Monitoring"
                     daysRem = maxOf(0, ceil((end - today) / (1000.0 * 60 * 60 * 24)).toInt())
                 }
             } else if (netWealth >= nisab) {
-                status = "Ready to Monitor"
+                status = "Not Mandatory" // Matches Zakat Screen where it asks user to manually start it
             }
         }
 

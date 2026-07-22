@@ -38,7 +38,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-// ─── Theme Colors[cite: 3] ───
+// ─── Theme Colors ───
 private val Emerald500 = Color(0xFF10B981)
 private val Green500 = Color(0xFF22C55E)
 private val Pink500 = Color(0xFFEC4899)
@@ -82,12 +82,22 @@ private fun getCategoryIcon(cat: String): String {
 @Composable
 fun GoalsScreen(
     viewModel: GoalsViewModel = hiltViewModel(),
+    triggerFabAdd: Long = 0L,
+    onAddHandled: () -> Unit = {},
     onNavigateBack: () -> Unit,
-    onNavigateToDetail: (String) -> Unit
+    onNavigateToDetail: (String) -> Unit = {} // Default empty block to prevent crashes if missing in NavGraph
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
+
+    // ─── Global FAB Trigger Listener ───
+    LaunchedEffect(triggerFabAdd) {
+        if (triggerFabAdd > 0L) {
+            viewModel.openGoalModal()
+            onAddHandled()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -137,7 +147,7 @@ fun GoalsScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ─── Summary Cards[cite: 3] ───
+            // ─── Summary Cards ───
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SummaryCard("Allocated", fmt(state.totalAllocated), "Virtual savings", Icons.Default.Savings, Color(0xFF16A34A), Modifier.weight(1f))
@@ -150,7 +160,7 @@ fun GoalsScreen(
                 }
             }
 
-            // ─── Account Allocations Warning Card[cite: 3] ───
+            // ─── Account Allocations Warning Card ───
             if (state.accountsWithAllocations.any { it.allocated > 0 }) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Brush.horizontalGradient(listOf(Color(0xFFEFF6FF), Color(0xFFEEF2FF)))).border(2.dp, Color(0xFFBFDBFE), RoundedCornerShape(12.dp)).padding(16.dp)) {
@@ -195,7 +205,7 @@ fun GoalsScreen(
                 }
             }
 
-            // ─── Filter Tabs[cite: 3] ───
+            // ─── Filter Tabs ───
             item {
                 Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFE5E7EB)), modifier = Modifier.fillMaxWidth()) {
                     LazyRow(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -211,9 +221,9 @@ fun GoalsScreen(
                 }
             }
 
-            // ─── Goal List[cite: 3] ───
+            // ─── Goal List ───
             val filtered = state.goals.filter { if(state.filterStatus == "all") true else it.status == state.filterStatus }
-            
+
             if (filtered.isEmpty()) {
                 item {
                     Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp)).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {

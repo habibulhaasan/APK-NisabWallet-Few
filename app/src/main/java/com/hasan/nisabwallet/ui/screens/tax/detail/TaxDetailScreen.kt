@@ -94,16 +94,12 @@ fun TaxDetailScreen(
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Income Year ${taxYear.incomeYear}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                                    Spacer(Modifier.width(8.dp))
-                                    StatusBadge(taxYear.status)
-                                }
-                                Text("Tax Year ${taxYear.taxYear} • ${formatDate(taxYear.fiscalYearStart)} - ${formatDate(taxYear.fiscalYearEnd)}", fontSize = 12.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 4.dp))
-                                Text("Filing Deadline: ${formatDate(taxYear.filingDeadline)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(top = 2.dp))
+                            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text("Income Year ${taxYear.incomeYear}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Spacer(Modifier.height(6.dp))
+                                StatusBadge(taxYear.status)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 IconButton(onClick = { viewModel.openProfileModal() }, modifier = Modifier.size(36.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))) {
                                     Icon(Icons.Default.Settings, "Profile", tint = Color(0xFF374151), modifier = Modifier.size(18.dp))
                                 }
@@ -121,9 +117,15 @@ fun TaxDetailScreen(
                             }
                         }
 
+                        Spacer(Modifier.height(12.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Tax Year: ${taxYear.taxYear}", fontSize = 12.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Fiscal: ${formatDate(taxYear.fiscalYearStart)} to ${formatDate(taxYear.fiscalYearEnd)}", fontSize = 12.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Filing Deadline: ${formatDate(taxYear.filingDeadline)}", fontSize = 12.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+
                         HorizontalDivider(color = Color(0xFFF3F4F6), modifier = Modifier.padding(vertical = 16.dp))
 
-                        // 2x2 Grid for Metrics on Mobile
                         val savingsRate = if (analysis.totalIncome > 0) ((analysis.totalIncome - analysis.totalExpenses) / analysis.totalIncome * 100).toInt() else 0
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,14 +174,14 @@ fun TaxDetailScreen(
                                     analysis.income.forEach { (catId, amt) ->
                                         val cat = TaxCategoryUtils.INCOME_TAX_CATEGORIES.find { it.id == catId }
                                         val pct = if (analysis.totalIncome > 0) String.format(Locale.US, "%.1f", (amt / analysis.totalIncome) * 100) else "0"
-                                        Row(Modifier.fillMaxWidth().background(Color(0xFFF0FDF4), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Row(Modifier.fillMaxWidth().background(Color(0xFFF0FDF4), RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                                Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text("৳${fmt(amt)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
-                                                Text("$pct%", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.wrapContentWidth()) {
+                                                Text("৳${fmt(amt)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text("$pct%", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                         }
                                     }
@@ -203,14 +205,14 @@ fun TaxDetailScreen(
                                     analysis.expenses.entries.sortedByDescending { it.value }.take(10).forEach { (catId, amt) ->
                                         val cat = TaxCategoryUtils.ALL_EXPENSE_TAX_CATEGORIES.find { it.id == catId }
                                         val pct = if (analysis.totalExpenses > 0) String.format(Locale.US, "%.1f", (amt / analysis.totalExpenses) * 100) else "0"
-                                        Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                                Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                                Text(cat?.name ?: catId, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(cat?.nbrCode ?: "", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text("৳${fmt(amt)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
-                                                Text("$pct%", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.wrapContentWidth()) {
+                                                Text("৳${fmt(amt)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text("$pct%", fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                         }
                                     }
@@ -238,23 +240,24 @@ fun TaxDetailScreen(
                                 Text("No assets added", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(vertical = 12.dp))
                             } else {
                                 state.assets.forEach { asset ->
-                                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                                            Text(asset.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            Text(asset.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(TaxCategoryUtils.ALL_EXPENSE_TAX_CATEGORIES.find { it.id == asset.assetType }?.name ?: asset.assetType, fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("৳${fmt(asset.currentValue)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                            IconButton(onClick = { viewModel.openAssetModal(asset) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Edit, null, tint = Color(0xFF2563EB), modifier = Modifier.size(14.dp)) }
-                                            IconButton(onClick = { viewModel.requestDelete("asset", asset) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp)) }
+                                        Text("৳${fmt(asset.currentValue)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Spacer(Modifier.width(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                                            IconButton(onClick = { viewModel.openAssetModal(asset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Edit, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
+                                            IconButton(onClick = { viewModel.requestDelete("asset", asset) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp)) }
                                         }
                                     }
                                 }
                             }
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Total Assets", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                Text("৳${fmt(taxYear.totalAssets)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
+                                Text("৳${fmt(taxYear.totalAssets)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill=false), textAlign = TextAlign.End)
                             }
                         }
                     }
@@ -273,23 +276,24 @@ fun TaxDetailScreen(
                                 Text("No liabilities added", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(vertical = 12.dp))
                             } else {
                                 state.liabilities.forEach { l ->
-                                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Color(0xFFF9FAFB), RoundedCornerShape(6.dp)).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                                            Text(l.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            Text(l.description, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(l.liabilityType, fontSize = 10.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("৳${fmt(l.principal)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                            IconButton(onClick = { viewModel.openLiabilityModal(l) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Edit, null, tint = Color(0xFF2563EB), modifier = Modifier.size(14.dp)) }
-                                            IconButton(onClick = { viewModel.requestDelete("liability", l) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp)) }
+                                        Text("৳${fmt(l.principal)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Spacer(Modifier.width(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                                            IconButton(onClick = { viewModel.openLiabilityModal(l) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Edit, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
+                                            IconButton(onClick = { viewModel.requestDelete("liability", l) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp)) }
                                         }
                                     }
                                 }
                             }
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Total Liabilities", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                Text("৳${fmt(state.liabilities.sumOf { it.principal })}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA580C))
+                                Text("৳${fmt(state.liabilities.sumOf { it.principal })}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA580C), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill=false), textAlign = TextAlign.End)
                             }
                         }
                     }
@@ -429,7 +433,7 @@ private fun ProfileModal(profile: TaxProfile, isSaving: Boolean, onDismiss: () -
 private fun formatDate(dateStr: String): String {
     return try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val out = SimpleDateFormat("MMM d, yyyy", Locale.US)
+        val out = SimpleDateFormat("dd MMM yyyy", Locale.US)
         out.format(sdf.parse(dateStr)!!)
     } catch (_: Exception) { dateStr }
 }

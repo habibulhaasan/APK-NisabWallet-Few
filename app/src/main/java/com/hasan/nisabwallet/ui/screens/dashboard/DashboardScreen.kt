@@ -76,27 +76,6 @@ fun DashboardScreen(
                             Text("Nisab Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                         }
                     }
-
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(if (state.syncStatus == "Synced") Color(0xFFECFDF5) else Color(0xFFFFFBEB))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(if (state.syncStatus == "Synced") Color(0xFF10B981) else Color(0xFFF59E0B), CircleShape)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = state.syncStatus,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (state.syncStatus == "Synced") Color(0xFF047857) else Color(0xFFB45309)
-                        )
-                    }
                 }
             }
         }
@@ -278,7 +257,7 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
                     Spacer(Modifier.width(8.dp))
                     Text("Zakat Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                 }
-                Surface(shape = RoundedCornerShape(50), color = if(state.zakatStatus == "Zakat Due") Color(0xFFDC2626) else Color(0xFF2563EB)) {
+                Surface(shape = RoundedCornerShape(50), color = if(state.zakatStatus == "Due") Color(0xFFDC2626) else Color(0xFF2563EB)) {
                     Text(state.zakatStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
@@ -305,7 +284,7 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
                 LinearProgressIndicator(progress = { (state.zakatProgress / 100f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = Color(0xFF059669), trackColor = Color(0xFFD1FAE5))
             }
 
-            if (state.zakatStatus == "Zakat Due") {
+            if (state.zakatStatus == "Due") {
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Zakat Amount Due (2.5%)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))

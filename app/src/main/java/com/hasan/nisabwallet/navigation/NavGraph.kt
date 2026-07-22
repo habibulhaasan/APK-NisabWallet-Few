@@ -79,6 +79,7 @@ import com.hasan.nisabwallet.ui.screens.subscription.SubscriptionScreen
 import com.hasan.nisabwallet.ui.screens.tax.TaxPreparationScreen
 import com.hasan.nisabwallet.ui.screens.tax.setup.TaxSetupScreen
 import com.hasan.nisabwallet.ui.screens.tax.detail.TaxDetailScreen
+import com.hasan.nisabwallet.ui.screens.goals.GoalsScreen
 
 object Routes {
     const val LOGIN = "login"
@@ -118,7 +119,7 @@ object Routes {
     fun createTaxDetailRoute(id: String) = "dashboard/tax/$id"
 
     val TOP_LEVEL_ROUTES = listOf(
-        DASHBOARD, TRANSACTIONS, ACCOUNTS, CATEGORIES, INVESTMENTS,
+        DASHBOARD, TRANSACTIONS, ACCOUNTS, CATEGORIES, INVESTMENTS, GOALS,
         LOANS, LENDINGS, JEWELLERY, SETTINGS, MONTHLY_LEDGER, MONTHLY_GROCERY,
         ANALYTICS, CASHFLOW, RIBA, ZAKAT, TAX
     )
@@ -134,20 +135,20 @@ private val drawerTabs = listOf(
     NavTabItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Home),
     NavTabItem(Routes.ACCOUNTS, "Accounts", Icons.Default.AccountBalanceWallet),
     NavTabItem(Routes.TRANSACTIONS, "Transactions", Icons.Default.Receipt),
+    NavTabItem(Routes.MONTHLY_GROCERY, "Monthly Grocery", Icons.Default.ShoppingCart),
     NavTabItem(Routes.MONTHLY_LEDGER, "Monthly Ledger", Icons.Default.AccountBalance),
-    NavTabItem(Routes.MONTHLY_GROCERY, "Shopping List", Icons.Default.ShoppingCart),
-    NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
-    NavTabItem(Routes.GOALS, "Savings Goals", Icons.Default.TrackChanges),
+    NavTabItem(Routes.ANALYTICS, "Analytics", Icons.Default.PieChart),
     NavTabItem(Routes.CASHFLOW, "Cashflow", Icons.Default.SyncAlt),
+    NavTabItem(Routes.CATEGORIES, "Categories", Icons.Default.Category),
     NavTabItem(Routes.INVESTMENTS, "Investments", Icons.AutoMirrored.Filled.TrendingUp),
+    NavTabItem(Routes.GOALS, "Savings Goals", Icons.Default.TrackChanges),
     NavTabItem(Routes.JEWELLERY, "Jewellery", Icons.Default.Diamond),
     NavTabItem(Routes.LOANS, "Loans Borrowed", Icons.Default.AccountBalance),
     NavTabItem(Routes.LENDINGS, "Money Lent", Icons.Default.Money),
     NavTabItem(Routes.TAX, "Tax Preparation", Icons.Default.Description),
     NavTabItem(Routes.ZAKAT, "Zakat Tracking", Icons.Default.Favorite),
     NavTabItem(Routes.RIBA, "Riba Tracker", Icons.Default.Warning),
-    NavTabItem(Routes.ANALYTICS, "Analytics", Icons.Default.PieChart),
-    NavTabItem(Routes.SETTINGS, "Settings", Icons.Default.Settings)
+    NavTabItem(Routes.SETTINGS, "Profile & Settings", Icons.Default.Settings)
 )
 
 @Composable
@@ -200,6 +201,7 @@ fun NisabWalletRootNav(
             Routes.ACCOUNTS -> NavTabItem("action_add", "Add Account", Icons.Default.AccountBalanceWallet)
             Routes.CATEGORIES -> NavTabItem("action_add", "Add Category", Icons.Default.Category)
             Routes.MONTHLY_GROCERY -> NavTabItem("action_add", "Add Grocery Item", Icons.Default.ShoppingCart)
+            Routes.GOALS -> NavTabItem("action_add", "Add Goal", Icons.Default.TrackChanges)
             else -> null
         }
 
@@ -578,6 +580,17 @@ fun NisabWalletNavGraph(
             )
         }
 
+        composable(Routes.GOALS) { backStackEntry ->
+            val savedStateHandle = backStackEntry.savedStateHandle
+            val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
+
+            GoalsScreen(
+                triggerFabAdd = trigger,
+                onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Routes.LOANS) { backStackEntry ->
             val savedStateHandle = backStackEntry.savedStateHandle
             val trigger by savedStateHandle.getStateFlow("triggerAdd", 0L).collectAsState()
@@ -651,7 +664,8 @@ fun NisabWalletNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPending = {
                     navController.navigate(Routes.DASHBOARD) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                        popUpTo(Routes.DASHBOARD) { inclusive = false }
+                        launchSingleTop = true
                     }
                 }
             )
@@ -666,7 +680,8 @@ fun NisabWalletNavGraph(
                 onAddHandled = { savedStateHandle["triggerAdd"] = 0L },
                 onNavigateToDashboard = {
                     navController.navigate(Routes.DASHBOARD) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                        popUpTo(Routes.DASHBOARD) { inclusive = false }
+                        launchSingleTop = true
                     }
                 },
             )
@@ -676,7 +691,8 @@ fun NisabWalletNavGraph(
             MonthlyLedgerScreen(
                 onNavigateToDashboard = {
                     navController.navigate(Routes.DASHBOARD) {
-                        popUpTo(Routes.DASHBOARD) { inclusive = true }
+                        popUpTo(Routes.DASHBOARD) { inclusive = false }
+                        launchSingleTop = true
                     }
                 },
             )
@@ -714,8 +730,7 @@ fun NisabWalletNavGraph(
         }
 
         val placeholders = listOf(
-            Routes.TRANSFER to "Transfer",
-            Routes.GOALS to "Goals"
+            Routes.TRANSFER to "Transfer"
         )
 
         placeholders.forEach { (route, title) ->
