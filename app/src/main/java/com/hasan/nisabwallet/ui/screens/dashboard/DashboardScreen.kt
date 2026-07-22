@@ -50,7 +50,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
-
+    
     var showBalanceModal by remember { mutableStateOf(false) }
 
     if (state.isLoading) {
@@ -104,9 +104,9 @@ fun DashboardScreen(
 
             item {
                 QuickActionsRow(
-                    onTransactions = onNavigateToTransactions,
-                    onAccounts = onNavigateToAccounts,
-                    onJewellery = onNavigateToJewellery,
+                    onTransactions = onNavigateToTransactions, 
+                    onAccounts = onNavigateToAccounts, 
+                    onJewellery = onNavigateToJewellery, 
                     onAnalytics = onNavigateToAnalytics
                 )
             }
@@ -245,9 +245,9 @@ private fun MonthlySummaryPills(income: Double, expense: Double, fmt: (Double) -
 @Composable
 private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { onClick() }, 
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Color.White), 
         border = BorderStroke(1.dp, Color(0xFFD1FAE5))
     ) {
         Column(Modifier.background(Brush.linearGradient(listOf(Color(0xFFECFDF5), Color(0xFFF0FDF4)))).padding(20.dp)) {
@@ -257,21 +257,21 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
                     Spacer(Modifier.width(8.dp))
                     Text("Zakat Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                 }
-                Surface(shape = RoundedCornerShape(50), color = if(state.zakatStatus == "Due") Color(0xFFDC2626) else Color(0xFF2563EB)) {
+                Surface(shape = RoundedCornerShape(50), color = if(state.zakatStatus == "Zakat Due") Color(0xFFDC2626) else if (state.zakatStatus == "Monitoring") Color(0xFF2563EB) else Color(0xFF111827)) {
                     Text(state.zakatStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
 
             Spacer(Modifier.height(16.dp))
-
+            
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f)) { 
                     Text("Net Zakatable Wealth", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(fmt(state.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(fmt(state.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
                 }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) { 
                     Text("Nisab Threshold", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if(state.nisabThreshold>0) fmt(state.nisabThreshold) else "Not Set", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if(state.nisabThreshold>0) fmt(state.nisabThreshold) else "Not Set", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) 
                 }
             }
 
@@ -284,7 +284,7 @@ private fun ZakatStatusCard(state: DashboardUiState, fmt: (Double) -> String, on
                 LinearProgressIndicator(progress = { (state.zakatProgress / 100f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = Color(0xFF059669), trackColor = Color(0xFFD1FAE5))
             }
 
-            if (state.zakatStatus == "Due") {
+            if (state.zakatStatus == "Zakat Due") {
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Zakat Amount Due (2.5%)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
@@ -461,7 +461,7 @@ private fun BalanceBreakdownModal(
     onManageAccounts: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
+    
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -481,7 +481,7 @@ private fun BalanceBreakdownModal(
                     Text(fmt(totalBalance), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFF059669), fontFamily = FontFamily.Monospace)
                 }
                 Spacer(Modifier.height(16.dp))
-
+                
                 Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF9FAFB), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                     Column {
                         accounts.forEachIndexed { index, acc ->

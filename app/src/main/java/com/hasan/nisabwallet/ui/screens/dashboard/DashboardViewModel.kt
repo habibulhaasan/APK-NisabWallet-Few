@@ -22,8 +22,7 @@ data class DashboardAccount(val id: String, val name: String, val balance: Doubl
 data class DashboardUiState(
     val isLoading: Boolean = true,
     val userName: String = "User",
-    val syncStatus: String = "Connecting...",
-
+    
     // Balances & Transactions
     val totalBalance: Double = 0.0,
     val accounts: List<DashboardAccount> = emptyList(),
@@ -31,7 +30,7 @@ data class DashboardUiState(
     val thisMonthExpense: Double = 0.0,
     val recentTransactions: List<DashboardTransaction> = emptyList(),
     val categories: Map<String, DashboardCategory> = emptyMap(),
-
+    
     // Zakat Status
     val nisabThreshold: Double = 0.0,
     val netZakatableWealth: Double = 0.0,
@@ -71,7 +70,6 @@ class DashboardViewModel @Inject constructor(
 
     private val listeners = mutableListOf<ListenerRegistration>()
 
-    // Wealth aggregation variables
     private var accTotal = 0.0
     private var invTotal = 0.0
     private var jewTotal = 0.0
@@ -90,12 +88,12 @@ class DashboardViewModel @Inject constructor(
     private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
 
-        // 1. Accounts
+        // Accounts
         listeners.add(db.collection("users").document(uid).collection("accounts")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
-                    val accs = snap.documents.map {
-                        DashboardAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "")
+                    val accs = snap.documents.map { 
+                        DashboardAccount(it.id, it.getString("name") ?: "", it.getDouble("balance") ?: 0.0, it.getString("type") ?: "") 
                     }
                     accTotal = accs.sumOf { it.balance }
                     _uiState.update { it.copy(accounts = accs, totalBalance = accTotal) }
@@ -103,7 +101,7 @@ class DashboardViewModel @Inject constructor(
                 }
             })
 
-        // 2. Categories
+        // Categories
         listeners.add(db.collection("users").document(uid).collection("categories")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -114,10 +112,10 @@ class DashboardViewModel @Inject constructor(
                 }
             })
 
-        // 3. Transactions & Transfers (Recent & Monthly)
+        // Transactions & Transfers
         setupTransactionListeners(uid)
 
-        // 4. Zakat & Wealth Listeners
+        // Zakat & Wealth Listeners
         setupWealthListeners(uid)
     }
 
@@ -125,7 +123,7 @@ class DashboardViewModel @Inject constructor(
         var rawTx = emptyList<DashboardTransaction>()
         var rawTr = emptyList<DashboardTransaction>()
 
-        val combineTx = { status: String? ->
+        val combineTx = {
             val all = (rawTx + rawTr).sortedWith(compareByDescending<DashboardTransaction> { it.date }.thenByDescending { it.createdAtMillis })
             val cal = Calendar.getInstance()
             val year = cal.get(Calendar.YEAR)
@@ -141,17 +139,16 @@ class DashboardViewModel @Inject constructor(
                 }
             }
 
-            _uiState.update { it.copy(isLoading = false, recentTransactions = all.take(8), thisMonthIncome = inc, thisMonthExpense = exp, syncStatus = status ?: it.syncStatus) }
+            _uiState.update { it.copy(isLoading = false, recentTransactions = all.take(8), thisMonthIncome = inc, thisMonthExpense = exp) }
         }
 
         listeners.add(db.collection("users").document(uid).collection("transactions").orderBy("date", Query.Direction.DESCENDING).limit(50)
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
-                    val status = if (snap.metadata.hasPendingWrites()) "Syncing..." else if (snap.metadata.isFromCache()) "Offline" else "Synced"
                     rawTx = snap.documents.map { d ->
                         DashboardTransaction(d.id, d.getString("type") ?: "", d.getDouble("amount") ?: 0.0, d.getString("categoryId") ?: "", d.getString("accountId") ?: "", d.getString("description") ?: "", d.getString("date") ?: "", false, null, d.getTimestamp("createdAt")?.toDate()?.time ?: 0L)
                     }
-                    combineTx(status)
+                    combineTx()
                 }
             })
 
@@ -167,7 +164,7 @@ class DashboardViewModel @Inject constructor(
                         exp.add(DashboardTransaction("${t.id}-inc", "Income", amt, "", "", "", date, true, t.getString("fromAccountName"), ts))
                     }
                     rawTr = exp
-                    combineTx(null)
+                    combineTx()
                 }
             })
     }
@@ -180,18 +177,27 @@ class DashboardViewModel @Inject constructor(
             }
         })
 
-        listeners.add(db.collection("users").document(uid).collection("zakatCycles").whereEqualTo("status", "active").limit(1).addSnapshotListener { snap, _ ->
-            if (snap != null && !snap.isEmpty) {
-                val d = snap.documents.first()
-                activeCycleStatus = d.getString("status")
-                activeCycleDate = d.getString("startDate")
-                activeCycleDue = d.getDouble("zakatDue") ?: 0.0
-            } else {
-                activeCycleStatus = null
-                activeCycleDate = null
-            }
-            recalculateZakat()
-        })
+        // FIXED: Now catches active AND due cycles by ordering by newest.
+        listeners.add(db.collection("users").document(uid).collection("zakatCycles")
+            .orderBy("createdAt", Query.Direction.DESCENDING).limit(1)
+            .addSnapshotListener { snap, _ ->
+                if (snap != null && !snap.isEmpty) {
+                    val d = snap.documents.first()
+                    val status = d.getString("status")
+                    if (status == "active" || status == "due") {
+                        activeCycleStatus = status
+                        activeCycleDate = d.getString("startDate")
+                        activeCycleDue = d.getDouble("zakatDue") ?: 0.0
+                    } else {
+                        activeCycleStatus = null
+                        activeCycleDate = null
+                    }
+                } else {
+                    activeCycleStatus = null
+                    activeCycleDate = null
+                }
+                recalculateZakat()
+            })
 
         listeners.add(db.collection("users").document(uid).collection("investments").whereEqualTo("status", "active").addSnapshotListener { snap, _ ->
             invTotal = snap?.documents?.sumOf { ((it.getDouble("currentValue") ?: it.getDouble("purchasePrice") ?: 0.0) * (it.getDouble("quantity") ?: 1.0)) } ?: 0.0
@@ -231,26 +237,26 @@ class DashboardViewModel @Inject constructor(
             if (activeCycleDate != null) {
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 val start = runCatching { sdf.parse(activeCycleDate!!)?.time }.getOrNull() ?: System.currentTimeMillis()
-                val end = start + (354L * 24 * 60 * 60 * 1000)
+                val end = start + (354L * 24 * 60 * 60 * 1000) 
                 val today = System.currentTimeMillis()
 
                 if (today >= end || activeCycleStatus == "due") {
-                    status = "Due"
+                    status = "Zakat Due"
                     amt = if (activeCycleDue > 0) activeCycleDue else netWealth * 0.025
                 } else {
                     status = "Monitoring"
                     daysRem = maxOf(0, ceil((end - today) / (1000.0 * 60 * 60 * 24)).toInt())
                 }
             } else if (netWealth >= nisab) {
-                status = "Not Mandatory" // Matches Zakat Screen where it asks user to manually start it
+                status = "Not Mandatory"
             }
         }
 
-        _uiState.update {
+        _uiState.update { 
             it.copy(
-                netZakatableWealth = netWealth, zakatStatus = status, zakatAmount = amt,
+                netZakatableWealth = netWealth, zakatStatus = status, zakatAmount = amt, 
                 zakatProgress = progress, daysRemaining = daysRem, activeCycleDate = activeCycleDate
-            )
+            ) 
         }
     }
 
