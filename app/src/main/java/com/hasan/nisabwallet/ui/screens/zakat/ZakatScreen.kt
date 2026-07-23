@@ -127,14 +127,14 @@ fun ZakatScreen(
             if (state.activeTab == "overview") {
 
                 // ─── Previous Zakat Due Banner ───
-                if (state.dueCycle != null) {
+                state.dueCycle?.let { dueCycle ->
                     item {
                         Row(Modifier.fillMaxWidth().background(Color(0xFFFFFBEB), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
                             Icon(Icons.Default.Warning, null, tint = Color(0xFFD97706), modifier = Modifier.size(20.dp).padding(top = 2.dp))
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text("Previous Zakat Still Unpaid", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
-                                Text("Your Hijri year ended with zakat due of ৳${fmt(state.dueCycle.zakatDue)}. Please clear the previous payment.", fontSize = 12.sp, color = Color(0xFFB45309), modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                                Text("Your Hijri year ended with zakat due of ৳${fmt(dueCycle.zakatDue)}. Please clear the previous payment.", fontSize = 12.sp, color = Color(0xFFB45309), modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
                                 Button(onClick = { viewModel.openPaymentModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)), shape = RoundedCornerShape(8.dp), modifier = Modifier.height(36.dp)) {
                                     Text("Pay Previous Zakat Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
