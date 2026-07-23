@@ -19,28 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Calculate
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Diamond
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoneyOff
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.TrackChanges
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,7 +71,7 @@ fun ZakatScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(modifier = Modifier.width(48.dp))
+                        Spacer(modifier = Modifier.width(48.dp)) // Clears hamburger
                         Column {
                             Text("Zakat Tracking", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
                             Text("Monitor your Zakat obligations", fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -115,10 +94,11 @@ fun ZakatScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Action Buttons
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     when {
-                        state.zakatStatus == "Zakat Due" || state.activeCycle?.status == "due" -> {
+                        state.zakatStatus == "Due" || state.activeCycle?.status == "due" || state.dueCycle != null -> {
                             Button(onClick = { viewModel.openPaymentModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)), shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(48.dp)) {
                                 Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Pay Zakat", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
@@ -132,6 +112,7 @@ fun ZakatScreen(
                 }
             }
 
+            // Tabs
             item {
                 Row(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F4F6)).padding(4.dp)) {
                     listOf("overview" to "Overview", "history" to "Zakat History").forEach { (id, label) ->
@@ -144,6 +125,43 @@ fun ZakatScreen(
             }
 
             if (state.activeTab == "overview") {
+
+                // ─── Previous Zakat Due Banner ───
+                if (state.dueCycle != null) {
+                    item {
+                        Row(Modifier.fillMaxWidth().background(Color(0xFFFFFBEB), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.Warning, null, tint = Color(0xFFD97706), modifier = Modifier.size(20.dp).padding(top = 2.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Previous Zakat Still Unpaid", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                                Text("Your Hijri year ended with zakat due of ৳${fmt(state.dueCycle.zakatDue)}. Please clear the previous payment.", fontSize = 12.sp, color = Color(0xFFB45309), modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                                Button(onClick = { viewModel.openPaymentModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)), shape = RoundedCornerShape(8.dp), modifier = Modifier.height(36.dp)) {
+                                    Text("Pay Previous Zakat Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ─── Nisab Reminder Banner ───
+                if (state.zakatStatus == "Monitoring" && state.daysRemaining <= 3) {
+                    item {
+                        Row(Modifier.fillMaxWidth().background(Color(0xFFFEF2F2), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFECACA), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp).padding(top = 2.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Zakat Year Ends in ${state.daysRemaining} Days", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
+                                Text("Your 1-year cycle is almost complete. Please refresh your Nisab settings manually to ensure accurate calculation before the deadline.", fontSize = 12.sp, color = Color(0xFFB91C1C), modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                                Button(onClick = { viewModel.openSettingsModal() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)), shape = RoundedCornerShape(8.dp), modifier = Modifier.height(36.dp)) {
+                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
+                                    Text("Update Nisab Settings", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ─── Main Status Card ───
                 item {
                     Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(listOf(Color(0xFFECFDF5), Color(0xFFE0F2FE)))).border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(16.dp)).padding(24.dp)) {
                         Column {
@@ -153,18 +171,18 @@ fun ZakatScreen(
                                     Spacer(Modifier.width(12.dp))
                                     Column { Text("Current Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)); Text("Real-time monitoring", fontSize = 11.sp, color = Color(0xFF4B5563)) }
                                 }
-                                val bg = when(state.zakatStatus) { "Zakat Due" -> Color(0xFFDC2626); "Monitoring" -> Color(0xFF2563EB); else -> Color(0xFF111827) }
+                                val bg = when(state.zakatStatus) { "Due" -> Color(0xFFDC2626); "Monitoring" -> Color(0xFF2563EB); else -> Color(0xFF111827) }
                                 Surface(shape = RoundedCornerShape(50), color = bg) { Text(state.zakatStatus, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
                             }
 
                             Spacer(Modifier.height(24.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                WealthStatCard("Net Zakatable Wealth", fmt(state.breakdown.netZakatableWealth), Icons.Default.AccountBalanceWallet, Color(0xFF059669), Modifier.weight(1f))
+                                WealthStatCard("Net Zakatable", fmt(state.breakdown.netZakatableWealth), Icons.Default.AccountBalanceWallet, Color(0xFF059669), Modifier.weight(1f))
                                 WealthStatCard("Nisab Threshold", if (state.settings.nisabThreshold > 0) fmt(state.settings.nisabThreshold) else "Not set", Icons.Default.CheckCircle, Color(0xFF059669), Modifier.weight(1f))
                             }
                             Spacer(Modifier.height(12.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (state.zakatStatus == "Zakat Due" || state.zakatStatus == "Monitoring") {
+                                if (state.zakatStatus == "Due" || state.zakatStatus == "Monitoring") {
                                     WealthStatCard("Zakat Due (2.5%)", fmt(state.zakatAmountDue), Icons.Default.Favorite, Color(0xFFDC2626), Modifier.weight(1f), true)
                                 }
                                 if (state.activeCycle != null) {
@@ -187,6 +205,7 @@ fun ZakatScreen(
                     }
                 }
 
+                // ─── Actions Block ───
                 if (state.settings.nisabThreshold == 0.0) {
                     item {
                         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD1FAE5))) {
@@ -205,15 +224,32 @@ fun ZakatScreen(
                     }
                 }
 
+                // ─── Due State Actions ───
+                if (state.zakatStatus == "Due" && state.dueCycle == null) {
+                    item {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(onClick = { viewModel.openPaymentModal() }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))) {
+                                Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+                                Text("Pay Zakat", fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(onClick = { viewModel.markAsExempt() }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(10.dp)) {
+                                Text("Mark Exempt", color = Color(0xFF4B5563))
+                            }
+                        }
+                    }
+                }
+
+                // ─── Wealth Breakdown Accordion ───
                 item {
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column {
                             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column { Text("Wealth Breakdown", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)); Text("Click sections to expand", fontSize = 11.sp, color = Color(0xFF6B7280)) }
+                                Column(Modifier.weight(1f)) { Text("Wealth Breakdown", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), maxLines = 1, overflow = TextOverflow.Ellipsis); Text("Click sections to expand", fontSize = 11.sp, color = Color(0xFF6B7280)) }
                                 Column(horizontalAlignment = Alignment.End) { Text("Net Zakatable", fontSize = 10.sp, color = Color(0xFF6B7280)); Text(fmt(state.breakdown.netZakatableWealth), fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color(0xFF059669)) }
                             }
                             HorizontalDivider(color = Color(0xFFF3F4F6))
 
+                            // Accounts
                             var openAcc by remember { mutableStateOf(false) }
                             Column {
                                 Row(Modifier.fillMaxWidth().clickable { openAcc = !openAcc }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -237,13 +273,14 @@ fun ZakatScreen(
                             }
                             HorizontalDivider(color = Color(0xFFF3F4F6))
 
+                            // Lendings
                             var openLend by remember { mutableStateOf(false) }
                             Column {
                                 Row(Modifier.fillMaxWidth().clickable { openLend = !openLend }.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(modifier = Modifier.size(32.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Handshake, null, tint = Color(0xFF0284C7), modifier = Modifier.size(16.dp)) }
                                         Spacer(Modifier.width(12.dp))
-                                        Text("Lendings (Receivable)", fontSize = 14.sp, color = Color(0xFF374151), fontWeight = FontWeight.Medium)
+                                        Text("Lendings", fontSize = 14.sp, color = Color(0xFF374151), fontWeight = FontWeight.Medium)
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) { Text("+ ${fmt(state.breakdown.lendingsIncludedTotal)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)); Spacer(Modifier.width(8.dp)); Icon(if(openLend) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = Color(0xFF9CA3AF)) }
                                 }
@@ -259,9 +296,6 @@ fun ZakatScreen(
                                                 Switch(checked = lend.countForZakat, onCheckedChange = { viewModel.toggleLendingZakat(lend.id, it) }, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF059669)))
                                             }
                                         }
-                                        if (state.breakdown.lendingsExcludedTotal > 0) {
-                                            Text("Excluded: ${fmt(state.breakdown.lendingsExcludedTotal)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(top = 4.dp))
-                                        }
                                     }
                                 }
                             }
@@ -271,6 +305,7 @@ fun ZakatScreen(
                             SimpleBreakdownRow("Savings Goals", fmt(state.breakdown.goalsTotal), Icons.Default.TrackChanges, Color(0xFFEA580C))
                             SimpleBreakdownRow("Jewellery (−15%)", fmt(state.breakdown.jewelleryTotal), Icons.Default.Diamond, Color(0xFFD97706))
 
+                            // Riba & Loans
                             if (state.breakdown.ribaTotal > 0) {
                                 Row(Modifier.fillMaxWidth().background(Color(0xFFFFFBEB)).padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Warning, null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(12.dp)); Text("Riba (Excluded)", fontSize = 13.sp, color = Color(0xFF92400E)) }
@@ -287,7 +322,7 @@ fun ZakatScreen(
                             }
 
                             Row(Modifier.fillMaxWidth().background(Color(0xFFECFDF5)).padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Net Zakatable Wealth", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
+                                Text("Net Zakatable", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
                                 Text(fmt(state.breakdown.netZakatableWealth), fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFF047857))
                             }
                         }
@@ -296,41 +331,14 @@ fun ZakatScreen(
 
                 item { Spacer(Modifier.height(40.dp)) }
             } else {
-                if (state.cycleHistory.isEmpty()) {
-                    item {
-                        Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.History, null, modifier = Modifier.size(48.dp), tint = Color(0xFFD1D5DB))
-                            Spacer(Modifier.height(16.dp))
-                            Text("No Zakat History Yet", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
-                            Text("Past completed cycles will appear here.", fontSize = 13.sp, color = Color(0xFF6B7280))
-                        }
-                    }
-                } else {
-                    items(state.cycleHistory, key = { it.id }) { cycle ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))
-                        ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Cycle: ${cycle.startDate}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                    Surface(shape = RoundedCornerShape(50), color = if(cycle.status=="paid") Color(0xFFD1FAE5) else Color(0xFFF3F4F6)) {
-                                        Text(cycle.status.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if(cycle.status=="paid") Color(0xFF065F46) else Color(0xFF4B5563), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column { Text("Starting Wealth", fontSize = 11.sp, color = Color(0xFF6B7280)); Text(fmt(cycle.startWealth), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827)) }
-                                    Column(horizontalAlignment = Alignment.End) { Text("Zakat Paid", fontSize = 11.sp, color = Color(0xFF6B7280)); Text(fmt(cycle.totalPaid), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669)) }
-                                }
-                            }
-                        }
-                    }
-                    item { Spacer(Modifier.height(40.dp)) }
+                // ─── ZAKAT HISTORY / ANALYTICS TAB ───
+                item {
+                    ZakatHistoryAnalyticsTab(state.cycleHistory, fmt)
                 }
             }
         }
 
+        // ─── Modals ───
         if (state.showSettingsModal) {
             NisabSettingsModal(
                 form = state.settingsForm, isSaving = state.isSaving, fetchState = state.bajusFetchState,
@@ -353,7 +361,7 @@ fun ZakatScreen(
         if (state.showPaymentModal) {
             PayZakatModal(
                 amount = state.paymentAmount, accountId = state.paymentAccountId,
-                zakatDue = state.zakatAmountDue, totalPaid = state.activeCycle?.totalPaid ?: 0.0,
+                zakatDue = state.dueCycle?.zakatDue ?: state.zakatAmountDue, totalPaid = state.dueCycle?.totalPaid ?: state.activeCycle?.totalPaid ?: 0.0,
                 accounts = state.accounts, isSaving = state.isSaving,
                 onAmountChange = { newAmt -> viewModel.updatePaymentAmount(newAmt) },
                 onAccountChange = { newAcc -> viewModel.updatePaymentAccount(newAcc) },
@@ -363,6 +371,131 @@ fun ZakatScreen(
         }
     }
 }
+
+// ─── Analytics Tab Component ───
+
+@Composable
+private fun ZakatHistoryAnalyticsTab(history: List<ZakatCycle>, fmt: (Double) -> String) {
+    var view by remember { mutableStateOf("cycles") }
+
+    Column {
+        Row(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F4F6)).padding(4.dp).fillMaxWidth()) {
+            listOf("cycles" to "Cycles", "analytics" to "Analytics").forEach { (id, label) ->
+                val selected = view == id
+                Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (selected) Color.White else Color.Transparent).clickable { view = id }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = if (selected) Color(0xFF111827) else Color(0xFF6B7280))
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        if (history.isEmpty()) {
+            Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.History, null, modifier = Modifier.size(48.dp), tint = Color(0xFFD1D5DB))
+                Spacer(Modifier.height(16.dp))
+                Text("No Zakat History Yet", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color(0xFF111827))
+                Text("Past completed cycles will appear here.", fontSize = 13.sp, color = Color(0xFF6B7280))
+            }
+        } else if (view == "cycles") {
+            val paidCycles = history.filter { it.status == "paid" }
+            val totalPaid = paidCycles.sumOf { it.totalPaid }
+            
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricBox("Total Cycles", history.size.toString(), Color(0xFF111827), Modifier.weight(1f))
+                MetricBox("Paid", paidCycles.size.toString(), Color(0xFF059669), Modifier.weight(1f))
+                MetricBox("Total Paid", fmt(totalPaid), Color(0xFF111827), Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+
+            history.forEach { cycle ->
+                var expanded by remember { mutableStateOf(false) }
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).clickable { expanded = !expanded }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Cycle: ${cycle.startDate}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                            Surface(shape = RoundedCornerShape(50), color = if(cycle.status=="paid") Color(0xFFD1FAE5) else Color(0xFFF3F4F6)) {
+                                Text(cycle.status.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if(cycle.status=="paid") Color(0xFF065F46) else Color(0xFF4B5563), modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column { Text("Starting Wealth", fontSize = 11.sp, color = Color(0xFF6B7280)); Text(fmt(cycle.startWealth), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827)) }
+                            Column(horizontalAlignment = Alignment.End) { Text("Zakat Paid", fontSize = 11.sp, color = Color(0xFF6B7280)); Text(fmt(cycle.totalPaid), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669)) }
+                        }
+                        
+                        AnimatedVisibility(visible = expanded) {
+                            Column(Modifier.padding(top = 16.dp)) {
+                                HorizontalDivider(color = Color(0xFFF3F4F6))
+                                Spacer(Modifier.height(12.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Nisab at Start:", fontSize = 12.sp, color = Color(0xFF6B7280))
+                                    Text(fmt(cycle.nisabAtStart), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                }
+                                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Zakat Due:", fontSize = 12.sp, color = Color(0xFF6B7280))
+                                    Text(fmt(if(cycle.zakatDue > 0) cycle.zakatDue else cycle.endWealth * 0.025), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                }
+                                if (cycle.payments.isNotEmpty()) {
+                                    Text("Payments", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                                    cycle.payments.forEach { p ->
+                                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(p.date, fontSize = 11.sp, color = Color(0xFF6B7280))
+                                            Text(fmt(p.amount), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF059669))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            val paidCycles = history.filter { it.status == "paid" }
+            if (paidCycles.isEmpty()) {
+                Text("Analytics require at least one paid cycle.", fontSize = 13.sp, color = Color(0xFF6B7280), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            } else {
+                val totalPaid = paidCycles.sumOf { it.totalPaid }
+                val avg = totalPaid / paidCycles.size
+                val discipline = ((paidCycles.size.toDouble() / history.size) * 100).toInt()
+
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column { Text("Payment Discipline", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)); Text("Fully paid on time", fontSize = 11.sp, color = Color(0xFF6B7280)) }
+                            Text("$discipline%", fontSize = 24.sp, fontWeight = FontWeight.Black, color = if(discipline>80) Color(0xFF059669) else Color(0xFFD97706))
+                        }
+                        LinearProgressIndicator(progress = { discipline / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)), color = if(discipline>80) Color(0xFF059669) else Color(0xFFD97706), trackColor = Color(0xFFF3F4F6))
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MetricBox("Average Paid", fmt(avg), Color(0xFF2563EB), Modifier.weight(1f))
+                    MetricBox("Highest Paid", fmt(paidCycles.maxOf { it.totalPaid }), Color(0xFF111827), Modifier.weight(1f))
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Zakat Paid Trend", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827), modifier = Modifier.padding(bottom = 12.dp))
+                        val maxAmt = paidCycles.maxOf { it.totalPaid }
+                        Row(Modifier.fillMaxWidth().height(120.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+                            paidCycles.takeLast(8).forEach { c ->
+                                val h = if(maxAmt>0) (c.totalPaid / maxAmt * 100).toFloat() else 0f
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                                    Box(modifier = Modifier.fillMaxWidth(0.6f).fillMaxHeight(h/100f).background(Color(0xFF10B981), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                                    Text(c.startDate.takeLast(5), fontSize = 9.sp, color = Color(0xFF6B7280), modifier = Modifier.padding(top = 4.dp), maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Component Helpers ───
 
 @Composable
 private fun WealthStatCard(label: String, value: String, icon: ImageVector, iconColor: Color, modifier: Modifier, highlight: Boolean = false) {
@@ -396,6 +529,14 @@ private fun SimpleBreakdownRow(label: String, value: String, icon: ImageVector, 
         Text("+ $value", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
     }
     HorizontalDivider(color = Color(0xFFF3F4F6))
+}
+
+@Composable
+private fun MetricBox(label: String, value: String, color: Color, modifier: Modifier) {
+    Column(modifier.background(Color(0xFFF9FAFB), RoundedCornerShape(8.dp)).padding(12.dp)) {
+        Text(label, fontSize = 11.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(top = 2.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -470,7 +611,6 @@ private fun NisabSettingsModal(
                             }
                         }
 
-                        // Price Cards (Swapped Per Vori to be above Per Gram inside the card)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Column(Modifier.weight(1f).background(Color(0xFFFFFBEB), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(12.dp)).padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
@@ -481,14 +621,10 @@ private fun NisabSettingsModal(
                                 
                                 Text("Per vori", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(deductedGold * 11.664)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                
                                 Spacer(Modifier.height(6.dp))
-                                
                                 Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(deductedGold)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                if (form.applyDeduction) {
-                                    Text("৳${CurrencyFormatter.formatBDT(form.goldRates.k22)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), textDecoration = TextDecoration.LineThrough)
-                                }
+                                if (form.applyDeduction) Text("৳${CurrencyFormatter.formatBDT(form.goldRates.k22)}", fontSize = 11.sp, color = Color(0xFF9CA3AF), textDecoration = TextDecoration.LineThrough)
                             }
 
                             Column(Modifier.weight(1f).background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(12.dp)).padding(12.dp)) {
@@ -496,24 +632,16 @@ private fun NisabSettingsModal(
                                     Box(modifier = Modifier.size(8.dp).background(Color(0xFF94A3B8), CircleShape)); Spacer(Modifier.width(6.dp))
                                     Text("Silver (Trad.)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
                                 }
-                                
                                 Text("Per vori", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(form.silverRates.traditional * 11.664)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                
                                 Spacer(Modifier.height(6.dp))
-                                
                                 Text("Per gram", fontSize = 11.sp, color = Color(0xFF9CA3AF))
                                 Text("৳${CurrencyFormatter.formatBDT(form.silverRates.traditional)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
-                                
                                 Text("★ Nisab basis", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF059669), modifier = Modifier.padding(top = 4.dp))
                             }
                         }
 
-                        GoldDeductionToggle(
-                            enabled = form.applyDeduction,
-                            rawGoldGram = form.goldRates.k22,
-                            onToggle = { onUpdate(form.copy(applyDeduction = it)) }
-                        )
+                        GoldDeductionToggle(enabled = form.applyDeduction, rawGoldGram = form.goldRates.k22, onToggle = { onUpdate(form.copy(applyDeduction = it)) })
 
                         Surface(modifier = Modifier.fillMaxWidth().clickable { showAllKarats = !showAllKarats }, color = Color(0xFFF9FAFB), shape = RoundedCornerShape(12.dp)) {
                             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -566,10 +694,8 @@ private fun NisabSettingsModal(
                         }
                     }
 
-                    // Vori first visually for manual entry
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) { Box(modifier = Modifier.size(10.dp).background(Color(0xFF94A3B8), CircleShape)); Spacer(Modifier.width(8.dp)); Text("Silver Price (৳)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827)) }
-                        Text("Enter Traditional (Sanaton) silver price for accurate Nisab", fontSize = 11.sp, color = Color(0xFF9CA3AF), modifier = Modifier.padding(start = 18.dp, bottom = 8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(value = manualSilverVori, onValueChange = {
                                 manualSilverVori = it; manualSilverGram = (it.toDoubleOrNull()?.div(11.664))?.toString() ?: ""
@@ -579,9 +705,6 @@ private fun NisabSettingsModal(
                                 manualSilverGram = it; manualSilverVori = (it.toDoubleOrNull()?.times(11.664))?.toString() ?: ""
                                 onUpdate(form.copy(silverPricePerGram = it.toDoubleOrNull() ?: 0.0, silverPricePerVori = manualSilverVori.toDoubleOrNull() ?: 0.0))
                             }, label = { Text("Per Gram") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                        }
-                        if ((manualSilverGram.toDoubleOrNull() ?: 0.0) > 0) {
-                            Text("Nisab = ৳${CurrencyFormatter.formatBDT((manualSilverGram.toDoubleOrNull() ?: 0.0) * 612.36)} (612.36 g × price/gram)", fontSize = 11.sp, color = Color(0xFF059669), fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
                         }
                     }
 
@@ -600,27 +723,12 @@ private fun NisabSettingsModal(
                     }
 
                     if ((manualGoldGram.toDoubleOrNull() ?: 0.0) > 0) {
-                        GoldDeductionToggle(
-                            enabled = form.applyDeduction,
-                            rawGoldGram = manualGoldGram.toDoubleOrNull() ?: 0.0,
-                            onToggle = { onUpdate(form.copy(applyDeduction = it)) }
-                        )
+                        GoldDeductionToggle(enabled = form.applyDeduction, rawGoldGram = manualGoldGram.toDoubleOrNull() ?: 0.0, onToggle = { onUpdate(form.copy(applyDeduction = it)) })
                     }
 
                     val rawManualNisab = if (form.priceUnit == "gram") (manualSilverGram.toDoubleOrNull()?:0.0) * 612.36 else (manualSilverVori.toDoubleOrNull()?:0.0) * 52.5
                     if (rawManualNisab > 0) {
                         NisabResultCard(rawManualNisab)
-
-                        Column(Modifier.fillMaxWidth().background(Color(0xFFF9FAFB), RoundedCornerShape(12.dp)).padding(12.dp)) {
-                            Text("Calculation breakdown", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4B5563))
-                            if (form.priceUnit == "gram") {
-                                Text("৳${manualSilverGram}/g × 612.36 g = ৳${CurrencyFormatter.formatBDT(rawManualNisab)}", fontSize = 12.sp, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp))
-                            } else {
-                                Text("৳${manualSilverVori}/vori × 52.5 = ৳${CurrencyFormatter.formatBDT(rawManualNisab)}", fontSize = 12.sp, color = Color(0xFF111827), modifier = Modifier.padding(top = 4.dp))
-                            }
-                            Text("No deduction applied — silver Nisab uses full market price.", fontSize = 11.sp, color = Color(0xFF9CA3AF), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(top = 4.dp))
-                        }
-
                         Button(onClick = { onSave() }, enabled = !isSaving, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))) {
                             if (isSaving) CircularProgressIndicator(Modifier.size(16.dp), Color.White, 2.dp) else Text("Save — Nisab ৳${CurrencyFormatter.formatBDT(rawManualNisab)}", fontWeight = FontWeight.Bold)
                         }
@@ -644,24 +752,9 @@ private fun GoldDeductionToggle(enabled: Boolean, rawGoldGram: Double, onToggle:
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Apply 15% Deduction on Gold", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if(enabled) Color(0xFF78350F) else Color(0xFF374151))
-                    if (enabled) {
-                        Surface(shape = RoundedCornerShape(50), color = Color(0xFFFDE68A), modifier = Modifier.padding(start = 8.dp)) {
-                            Text("% ON", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
-                    }
+                    if (enabled) Surface(shape = RoundedCornerShape(50), color = Color(0xFFFDE68A), modifier = Modifier.padding(start = 8.dp)) { Text("% ON", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
                 }
-                Text("For gold standard Nisab only. BAJUS officially deducts 17% for old gold, but Bangladeshi Ulama recommend 15%. Not applicable for silver-based Nisab.", fontSize = 11.sp, color = Color(0xFF6B7280), lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
-
-                if (rawGoldGram > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                        Text("৳${CurrencyFormatter.formatBDT(rawGoldGram)}/g", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if(enabled) Color(0xFF9CA3AF) else Color(0xFFB45309), textDecoration = if(enabled) TextDecoration.LineThrough else TextDecoration.None)
-                        if (enabled) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Color(0xFF9CA3AF), modifier = Modifier.padding(horizontal = 6.dp).size(12.dp))
-                            Text("৳${CurrencyFormatter.formatBDT(rawGoldGram * 0.85)}/g", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
-                            Text(" (after −15%)", fontSize = 11.sp, color = Color(0xFF9CA3AF))
-                        }
-                    }
-                }
+                Text("For gold standard Nisab only. Not applicable for silver-based Nisab.", fontSize = 11.sp, color = Color(0xFF6B7280), lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -682,7 +775,6 @@ private fun NisabResultCard(nisab: Double) {
     }
 }
 
-// Visual Swapped layout (Per Vori first, Per Gram second)
 @Composable
 private fun KaratTable(label: String, theme: String, rates: KaratRates, applyDeduction: Boolean, nisabRow: String = "") {
     val isAmber = theme == "amber"
@@ -690,7 +782,6 @@ private fun KaratTable(label: String, theme: String, rates: KaratRates, applyDed
     val border = if(isAmber) Color(0xFFFEF3C7) else Color(0xFFF1F5F9)
     val head = if(isAmber) Color(0xFFB45309) else Color(0xFF334155)
     val dot = if(isAmber) Color(0xFFFBBF24) else Color(0xFF94A3B8)
-
     val adj = { n: Double -> if(applyDeduction) n * 0.85 else n }
 
     Column(modifier = Modifier.fillMaxWidth().background(bg, RoundedCornerShape(12.dp)).border(1.dp, border, RoundedCornerShape(12.dp))) {
@@ -699,19 +790,13 @@ private fun KaratTable(label: String, theme: String, rates: KaratRates, applyDed
                 Box(modifier = Modifier.size(8.dp).background(dot, CircleShape)); Spacer(Modifier.width(8.dp))
                 Text("$label (BAJUS)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head)
             }
-            if (applyDeduction) Text("−15% applied", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = head.copy(alpha = 0.7f))
         }
-
-        // Header Row Swapped
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text("Karat", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, modifier = Modifier.weight(1.5f))
             Text("Per Vori", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
             Text("Per Gram", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = head, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
         }
-
-        val rows = listOf("22K" to rates.k22, "21K" to rates.k21, "18K" to rates.k18, nisabRow.ifBlank { "Traditional" } to rates.traditional)
-
-        rows.forEach { (k, p) -> // p is the per gram price
+        listOf("22K" to rates.k22, "21K" to rates.k21, "18K" to rates.k18, nisabRow.ifBlank { "Traditional" } to rates.traditional).forEach { (k, p) ->
             val isNisab = k == nisabRow
             Row(Modifier.fillMaxWidth().background(if(isNisab) Color(0xFFECFDF5) else Color.Transparent).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(k, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = if(isNisab) Color(0xFF047857) else Color(0xFF374151), modifier = Modifier.weight(1.5f))
@@ -736,12 +821,6 @@ private fun StartCycleModal(
             }
             HorizontalDivider()
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("When did your wealth cross Nisab?", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
-                        Text("Set the actual date your wealth first crossed the threshold to ensure accurate 1-year Hijri calculation.", fontSize = 11.sp, color = Color(0xFF1D4ED8), modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
                 DateSelectionField(label = "Cycle Start Date *", dateString = date, onDateSelected = onDateChange)
             }
             HorizontalDivider()
@@ -777,7 +856,6 @@ private fun PayZakatModal(
                         HorizontalDivider()
 
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Summary Row
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Column(Modifier.weight(1f).background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp)).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("TOTAL DUE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
@@ -795,7 +873,6 @@ private fun PayZakatModal(
                                 }
                             }
 
-                            // Amount Field
                             Column {
                                 OutlinedTextField(
                                     value = amount, onValueChange = onAmountChange,
@@ -809,7 +886,6 @@ private fun PayZakatModal(
                                 }
                             }
 
-                            // Drill-down for Account Selection
                             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))) {
                                 Row(modifier = Modifier.fillMaxWidth().clickable { currentView = "selectAccount" }.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -868,7 +944,6 @@ private fun PayZakatModal(
     }
 }
 
-// ── Custom Native Date Picker Field ──
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DateSelectionField(label: String, dateString: String, onDateSelected: (String) -> Unit, modifier: Modifier = Modifier) {
