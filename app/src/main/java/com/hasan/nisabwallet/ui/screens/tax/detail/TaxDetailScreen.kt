@@ -23,7 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -34,7 +34,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hasan.nisabwallet.core.util.CurrencyFormatter
 import com.hasan.nisabwallet.core.util.TaxCategoryUtils
+import com.hasan.nisabwallet.core.util.TaxPdfGenerator // We will create this next
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -47,6 +49,8 @@ fun TaxDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val fmt = remember { { n: Double -> CurrencyFormatter.formatBDT(n) } }
 
     LaunchedEffect(Unit) {
@@ -54,6 +58,16 @@ fun TaxDetailScreen(
             when (event) {
                 is TaxDetailEvent.ShowToast -> snackbarHostState.showSnackbar(event.message)
                 TaxDetailEvent.NavigateBack -> onNavigateBack()
+                is TaxDetailEvent.GeneratePdf -> {
+                    scope.launch {
+                        try {
+                            TaxPdfGenerator.generate(context, event.format, event.taxYear, event.profile, event.assets, event.liabilities, event.analysis)
+                            snackbarHostState.showSnackbar("PDF successfully saved to Downloads folder")
+                        } catch (e: Exception) {
+                            snackbarHostState.showSnackbar("Failed to generate PDF: ${e.localizedMessage}")
+                        }
+                    }
+                }
             }
         }
     }
@@ -100,23 +114,22 @@ fun TaxDetailScreen(
                                 StatusBadge(taxYear.status)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                // PDF Print Button
+                                IconButton(onClick = { viewModel.openPdfModal() }, modifier = Modifier.size(36.dp).background(Color(0xFFFCE7F3), RoundedCornerShape(8.dp))) {
+                                    Icon(Icons.Default.PictureAsPdf, "Print PDF", tint = Color(0xFFBE185D), modifier = Modifier.size(18.dp))
+                                }
                                 IconButton(onClick = { viewModel.openProfileModal() }, modifier = Modifier.size(36.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))) {
                                     Icon(Icons.Default.Settings, "Profile", tint = Color(0xFF374151), modifier = Modifier.size(18.dp))
                                 }
-                                IconButton(
-                                    onClick = { viewModel.handleAnalyze() },
-                                    enabled = !state.isAnalyzing,
-                                    modifier = Modifier.size(36.dp).background(Color(0xFFDBEAFE), RoundedCornerShape(8.dp))
-                                ) {
-                                    if (state.isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), Color(0xFF2563EB), 2.dp)
-                                    else Icon(Icons.Default.Description, "Analyze", tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                                IconButton(onClick = { viewModel.handleAnalyze() }, enabled = !state.isAnalyzing, modifier = Modifier.size(36.dp).background(Color(0xFFDBEAFE), RoundedCornerShape(8.dp))) {
+                                    if (state.isAnalyzing) CircularProgressIndicator(Modifier.size(14.dp), Color(0xFF2563EB), 2.dp) else Icon(Icons.Default.Description, "Analyze", tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
                                 }
                                 IconButton(onClick = { viewModel.requestDelete("taxYear", taxYear) }, modifier = Modifier.size(36.dp).background(Color(0xFFFEF2F2), RoundedCornerShape(8.dp))) {
                                     Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
-
+                        
                         Spacer(Modifier.height(12.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("Tax Year: ${taxYear.taxYear}", fontSize = 12.sp, color = Color(0xFF6B7280), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -141,7 +154,6 @@ fun TaxDetailScreen(
                 }
             }
 
-            // ─── Warning if no mappings ───
             if (state.mappings.isEmpty()) {
                 item {
                     Row(Modifier.fillMaxWidth().background(Color(0xFFFEFCE8), RoundedCornerShape(12.dp)).border(1.dp, Color(0xFFFEF08A), RoundedCornerShape(12.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
@@ -156,10 +168,9 @@ fun TaxDetailScreen(
                 }
             }
 
-            // ─── Income & Expense Analysis Stacked ───
+            // Income / Expense Analysis
             item {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Income Analysis
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
@@ -190,7 +201,6 @@ fun TaxDetailScreen(
                         }
                     }
 
-                    // Expense Analysis
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
@@ -223,10 +233,9 @@ fun TaxDetailScreen(
                 }
             }
 
-            // ─── Assets & Liabilities Stacked ───
+            // Assets & Liabilities
             item {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Assets
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -262,7 +271,6 @@ fun TaxDetailScreen(
                         }
                     }
 
-                    // Liabilities
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -303,39 +311,29 @@ fun TaxDetailScreen(
             item { Spacer(Modifier.height(40.dp)) }
         }
 
-        // ─── Modals ───
-        if (state.showAssetModal) {
-            AssetModal(
-                editing = state.editingAsset,
-                isSaving = state.isSaving,
-                onDismiss = { viewModel.closeAssetModal() },
-                onSave = { type, desc, valAmt -> viewModel.saveAsset(type, desc, valAmt) }
+        // Modals
+        if (state.showPdfModal) {
+            PdfFormatModal(
+                onDismiss = { viewModel.closePdfModal() },
+                onGenerate = { format -> viewModel.triggerPdfGeneration(format) }
             )
+        }
+
+        if (state.showAssetModal) {
+            AssetModal(editing = state.editingAsset, isSaving = state.isSaving, onDismiss = { viewModel.closeAssetModal() }, onSave = { type, desc, valAmt -> viewModel.saveAsset(type, desc, valAmt) })
         }
 
         if (state.showLiabilityModal) {
-            LiabilityModal(
-                editing = state.editingLiability,
-                isSaving = state.isSaving,
-                onDismiss = { viewModel.closeLiabilityModal() },
-                onSave = { type, desc, principal, lender -> viewModel.saveLiability(type, desc, principal, lender) }
-            )
+            LiabilityModal(editing = state.editingLiability, isSaving = state.isSaving, onDismiss = { viewModel.closeLiabilityModal() }, onSave = { type, desc, principal, lender -> viewModel.saveLiability(type, desc, principal, lender) })
         }
 
         if (state.showProfileModal) {
-            ProfileModal(
-                profile = state.profile,
-                isSaving = state.isSaving,
-                onDismiss = { viewModel.closeProfileModal() },
-                onSave = { name, tin -> viewModel.saveProfile(name, tin) }
-            )
+            ProfileModal(profile = state.profile, isSaving = state.isSaving, onDismiss = { viewModel.closeProfileModal() }, onSave = { name, tin -> viewModel.saveProfile(name, tin) })
         }
 
         if (state.itemToDelete != null) {
             AlertDialog(
-                onDismissRequest = { viewModel.cancelDelete() },
-                icon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626)) },
-                title = { Text("Confirm Deletion") },
+                onDismissRequest = { viewModel.cancelDelete() }, icon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626)) }, title = { Text("Confirm Deletion") },
                 text = { Text("Are you sure you want to delete this record? This action cannot be undone.") },
                 confirmButton = { Button(onClick = { viewModel.confirmDelete() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))) { Text("Delete") } },
                 dismissButton = { OutlinedButton(onClick = { viewModel.cancelDelete() }) { Text("Cancel") } }
@@ -346,16 +344,45 @@ fun TaxDetailScreen(
 
 // ─── Helpers ───
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PdfFormatModal(onDismiss: () -> Unit, onGenerate: (String) -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color.White) {
+        Column(Modifier.padding(16.dp).fillMaxWidth().imePadding().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Generate NBR Document (PDF)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Select the format you wish to generate based on your filing requirements.", fontSize = 12.sp, color = Color(0xFF6B7280))
+
+            Card(modifier = Modifier.fillMaxWidth().clickable { onGenerate("IT-10BB") }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PictureAsPdf, null, tint = Color(0xFFBE185D), modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text("IT-10BB (Standard)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Statement of Assets, Liabilities and Expenses", fontSize = 11.sp, color = Color(0xFF6B7280))
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth().clickable { onGenerate("IT-10BB2024") }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PictureAsPdf, null, tint = Color(0xFFBE185D), modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text("IT-10BB2024 (New)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                        Text("Updated format for recent tax years", fontSize = 11.sp, color = Color(0xFF6B7280))
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
 @Composable
 private fun StatusBadge(status: String) {
-    val (bg, fg, text) = when (status) {
-        "filed" -> Triple(Color(0xFFDCFCE7), Color(0xFF15803D), "Filed")
-        "in_review" -> Triple(Color(0xFFDBEAFE), Color(0xFF1D4ED8), "In Review")
-        else -> Triple(Color(0xFFF3F4F6), Color(0xFF374151), "Draft")
-    }
-    Surface(color = bg, shape = RoundedCornerShape(50)) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = fg, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
-    }
+    val (bg, fg, text) = when (status) { "filed" -> Triple(Color(0xFFDCFCE7), Color(0xFF15803D), "Filed"); "in_review" -> Triple(Color(0xFFDBEAFE), Color(0xFF1D4ED8), "In Review"); else -> Triple(Color(0xFFF3F4F6), Color(0xFF374151), "Draft") }
+    Surface(color = bg, shape = RoundedCornerShape(50)) { Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = fg, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) }
 }
 
 @Composable
@@ -431,9 +458,5 @@ private fun ProfileModal(profile: TaxProfile, isSaving: Boolean, onDismiss: () -
 }
 
 private fun formatDate(dateStr: String): String {
-    return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val out = SimpleDateFormat("dd MMM yyyy", Locale.US)
-        out.format(sdf.parse(dateStr)!!)
-    } catch (_: Exception) { dateStr }
+    return try { SimpleDateFormat("dd MMM yyyy", Locale.US).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr)!!) } catch (_: Exception) { dateStr }
 }

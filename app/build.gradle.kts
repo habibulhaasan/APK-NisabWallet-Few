@@ -74,4 +74,5 @@ dependencies {
     implementation(libs.material)
 
     implementation("org.jsoup:jsoup:1.17.2")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }

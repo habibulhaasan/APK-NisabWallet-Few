@@ -95,6 +95,7 @@ data class TaxDetailUiState(
     val showAssetModal: Boolean = false,
     val showLiabilityModal: Boolean = false,
     val showProfileModal: Boolean = false,
+    val showPdfModal: Boolean = false, // Added for PDF selection
     val editingAsset: TaxAsset? = null,
     val editingLiability: TaxLiability? = null,
     val itemToDelete: Pair<String, Any>? = null // Type to item
@@ -103,6 +104,15 @@ data class TaxDetailUiState(
 sealed class TaxDetailEvent {
     data class ShowToast(val message: String, val isError: Boolean = false) : TaxDetailEvent()
     object NavigateBack : TaxDetailEvent()
+    // Added PDF Generation Event
+    data class GeneratePdf(
+        val format: String,
+        val taxYear: TaxYearRecord,
+        val profile: TaxProfile,
+        val analysis: TransactionAnalysisResult,
+        val assets: List<TaxAsset>,
+        val liabilities: List<TaxLiability>
+    ) : TaxDetailEvent()
 }
 
 @HiltViewModel
@@ -126,7 +136,7 @@ class TaxDetailViewModel @Inject constructor(
     private fun startRealTimeSync() {
         val uid = auth.currentUser?.uid ?: return
 
-        // 1. Tax Year Doc[cite: 15]
+        // 1. Tax Year Doc
         db.collection("users").document(uid).collection("taxYears").document(taxYearDocId)
             .addSnapshotListener { snap, _ ->
                 if (snap != null && snap.exists()) {
@@ -151,7 +161,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 2. Category Mappings[cite: 15]
+        // 2. Category Mappings
         db.collection("users").document(uid).collection("taxCategoryMappings")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -167,7 +177,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 3. Transactions[cite: 15]
+        // 3. Transactions
         db.collection("users").document(uid).collection("transactions")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -192,7 +202,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 4. Accounts[cite: 15]
+        // 4. Accounts
         db.collection("users").document(uid).collection("accounts")
             .addSnapshotListener { snap, _ ->
                 if (snap != null) {
@@ -208,7 +218,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 5. Tax Assets[cite: 15]
+        // 5. Tax Assets
         db.collection("users").document(uid).collection("taxAssets")
             .whereEqualTo("taxYearId", taxYearDocId)
             .addSnapshotListener { snap, _ ->
@@ -225,7 +235,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 6. Tax Liabilities[cite: 15]
+        // 6. Tax Liabilities
         db.collection("users").document(uid).collection("taxLiabilities")
             .whereEqualTo("taxYearId", taxYearDocId)
             .addSnapshotListener { snap, _ ->
@@ -243,7 +253,7 @@ class TaxDetailViewModel @Inject constructor(
                 }
             }
 
-        // 7. Profile[cite: 15]
+        // 7. Profile
         db.collection("users").document(uid).collection("settings").document("taxProfile")
             .addSnapshotListener { snap, _ ->
                 if (snap != null && snap.exists()) {
@@ -256,7 +266,7 @@ class TaxDetailViewModel @Inject constructor(
             }
     }
 
-    // ─── Transaction Analysis Algorithm[cite: 15] ───
+    // ─── Transaction Analysis Algorithm ───
     private fun recalculateAnalysis() {
         val taxYear = _uiState.value.taxYear ?: return
         val txs = _uiState.value.transactions
@@ -346,7 +356,6 @@ class TaxDetailViewModel @Inject constructor(
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
 
-                // Write offline-friendly[cite: 15]
                 db.collection("users").document(uid).collection("taxYears").document(taxYearDocId)
                     .update(updates)
 
@@ -359,7 +368,28 @@ class TaxDetailViewModel @Inject constructor(
         }
     }
 
-    // ─── Modal Actions[cite: 15] ───
+    // ─── PDF Generation Actions ───
+    fun openPdfModal() = _uiState.update { it.copy(showPdfModal = true) }
+    fun closePdfModal() = _uiState.update { it.copy(showPdfModal = false) }
+
+    fun triggerPdfGeneration(format: String) {
+        val state = _uiState.value
+        val taxYear = state.taxYear ?: return
+        
+        emitEvent(
+            TaxDetailEvent.GeneratePdf(
+                format = format,
+                taxYear = taxYear,
+                profile = state.profile,
+                analysis = state.analysis,
+                assets = state.assets,
+                liabilities = state.liabilities
+            )
+        )
+        closePdfModal()
+    }
+
+    // ─── Modal Actions ───
     fun openAssetModal(asset: TaxAsset? = null) = _uiState.update { it.copy(showAssetModal = true, editingAsset = asset) }
     fun closeAssetModal() = _uiState.update { it.copy(showAssetModal = false, editingAsset = null) }
 
